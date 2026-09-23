@@ -1,0 +1,6 @@
+{
+  "name": "Excel & Image Vault",
+  "description": "Excel catalog search, dynamic image filtering, and secure encrypted DAT image vault.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

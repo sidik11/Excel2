@@ -35,6 +35,12 @@ object SettingsManager {
     private const val KEY_FB_USERNAME = "key_fb_username"
     private const val KEY_APP_DOWNLOAD_URL = "key_app_download_url"
     private const val KEY_FACE_LOCK_ENABLED = "key_face_lock_enabled"
+    private const val KEY_SHAKE_TO_LOCK = "key_shake_to_lock"
+    private const val KEY_SHAKE_DURATION = "key_shake_duration_sec"
+    private const val KEY_DUAL_VAULT_SLIDESHOW_INTERVAL = "key_dual_vault_slideshow_interval"
+    private const val KEY_LAUNCHER_DISGUISE = "key_launcher_disguise"
+    private const val KEY_LAUNCHER_CUSTOM_ICON_URI = "key_launcher_custom_icon_uri"
+    private const val KEY_PANIC_CUSTOM_IMAGE = "key_panic_custom_image"
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -80,6 +86,9 @@ object SettingsManager {
         val fbUser = p.getString(KEY_FB_USERNAME, "") ?: ""
         val downloadUrl = p.getString(KEY_APP_DOWNLOAD_URL, "https://ais-pre-jgxqbiezgnewblvh6iilnv-571171211889.asia-southeast1.run.app") ?: "https://ais-pre-jgxqbiezgnewblvh6iilnv-571171211889.asia-southeast1.run.app"
         val faceLock = p.getBoolean(KEY_FACE_LOCK_ENABLED, false)
+        val shakeToLock = p.getBoolean(KEY_SHAKE_TO_LOCK, false)
+        val shakeDuration = p.getFloat(KEY_SHAKE_DURATION, 1.0f)
+        val dvInterval = p.getInt(KEY_DUAL_VAULT_SLIDESHOW_INTERVAL, 3)
 
         _settings.value = AppSettings(
             theme = theme,
@@ -106,7 +115,13 @@ object SettingsManager {
             facebookConnected = fbConnected,
             facebookUserName = fbUser,
             appDownloadUrl = downloadUrl,
-            faceLockEnabled = faceLock
+            faceLockEnabled = faceLock,
+            shakeToLockEnabled = shakeToLock,
+            shakeToLockDurationSeconds = shakeDuration,
+            dualVaultSlideshowIntervalSeconds = dvInterval,
+            launcherDisguiseName = p.getString(KEY_LAUNCHER_DISGUISE, "Excel") ?: "Excel",
+            launcherCustomIconUri = p.getString(KEY_LAUNCHER_CUSTOM_ICON_URI, "") ?: "",
+            panicCustomImageUri = p.getString(KEY_PANIC_CUSTOM_IMAGE, "") ?: ""
         )
     }
 
@@ -228,5 +243,35 @@ object SettingsManager {
     fun setFaceLockEnabled(enabled: Boolean) {
         prefs?.edit()?.putBoolean(KEY_FACE_LOCK_ENABLED, enabled)?.apply()
         _settings.value = _settings.value.copy(faceLockEnabled = enabled)
+    }
+
+    fun setShakeToLockEnabled(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_SHAKE_TO_LOCK, enabled)?.apply()
+        _settings.value = _settings.value.copy(shakeToLockEnabled = enabled)
+    }
+
+    fun setShakeToLockDurationSeconds(seconds: Float) {
+        prefs?.edit()?.putFloat(KEY_SHAKE_DURATION, seconds)?.apply()
+        _settings.value = _settings.value.copy(shakeToLockDurationSeconds = seconds)
+    }
+
+    fun setDualVaultSlideshowIntervalSeconds(seconds: Int) {
+        prefs?.edit()?.putInt(KEY_DUAL_VAULT_SLIDESHOW_INTERVAL, seconds)?.apply()
+        _settings.value = _settings.value.copy(dualVaultSlideshowIntervalSeconds = seconds)
+    }
+
+    fun setLauncherDisguise(disguiseName: String) {
+        prefs?.edit()?.putString(KEY_LAUNCHER_DISGUISE, disguiseName)?.apply()
+        _settings.value = _settings.value.copy(launcherDisguiseName = disguiseName)
+    }
+
+    fun setLauncherCustomIconUri(uri: String) {
+        prefs?.edit()?.putString(KEY_LAUNCHER_CUSTOM_ICON_URI, uri)?.apply()
+        _settings.value = _settings.value.copy(launcherCustomIconUri = uri)
+    }
+
+    fun setPanicCustomImageUri(uri: String) {
+        prefs?.edit()?.putString(KEY_PANIC_CUSTOM_IMAGE, uri)?.apply()
+        _settings.value = _settings.value.copy(panicCustomImageUri = uri)
     }
 }

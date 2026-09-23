@@ -34,5 +34,11 @@ data class AppSettings(
     val facebookConnected: Boolean = false,
     val facebookUserName: String = "",
     val appDownloadUrl: String = "https://ais-pre-jgxqbiezgnewblvh6iilnv-571171211889.asia-southeast1.run.app",
-    val faceLockEnabled: Boolean = false
+    val faceLockEnabled: Boolean = false,
+    val shakeToLockEnabled: Boolean = false,
+    val shakeToLockDurationSeconds: Float = 1.5f, // 0.5s to 5.0s
+    val panicCustomImageUri: String = "",
+    val dualVaultSlideshowIntervalSeconds: Int = 3, // 1, 2, 3, 4, 5 seconds
+    val launcherDisguiseName: String = "Excel", // "Excel", "Calculator", "Notes", "Weather", "Clock", "Custom"
+    val launcherCustomIconUri: String = ""
 )

@@ -23,6 +23,7 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -42,6 +43,8 @@ data class DualVaultSession(
     val status: String = "IDLE", // IDLE, WAITING, CONNECTED, DISCONNECTED
     val hostName: String = "",
     val peerName: String = "",
+    val hostProfileImage: String = "", // Base64 profile image
+    val peerProfileImage: String = "", // Base64 profile image
     val connectedAt: Long = 0L,
     val dualVaultFiles: List<DualVaultFileInfo> = emptyList(),
     val lastSyncTimestamp: Long = 0L,
@@ -68,42 +71,89 @@ object FirebaseBridgeManager {
 
     private var isPolling = false
     private var isLiveSyncing = false
-    private var isInitialized = false
 
     /**
      * Initializes FirebaseBridgeManager and restores active connection if previously paired.
-     * Connection remains persistent until a user explicitly taps Disconnect.
+     * Connection remains persistent across app restarts, reopens, and kills until a user explicitly taps Disconnect.
      */
     fun init(context: Context) {
-        if (isInitialized) return
-        isInitialized = true
+        if (_currentSession.value.isConnected) {
+            // Already connected in memory, ensure live sync is running
+            if (!isLiveSyncing && _currentSession.value.sessionId.isNotBlank()) {
+                startLiveSync(context, _currentSession.value.sessionId)
+            }
+            return
+        }
+
+        var loadedSession: DualVaultSession? = null
+
+        // 1. Check SharedPreferences
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val isConnected = prefs.getBoolean("is_connected", false)
-        if (isConnected) {
+        if (prefs.getBoolean("is_connected", false)) {
             val code = prefs.getString("code", "") ?: ""
-            val sessionId = prefs.getString("session_id", "") ?: ""
+            var sessionId = prefs.getString("session_id", "") ?: ""
             val isHost = prefs.getBoolean("is_host", false)
             val hostName = prefs.getString("host_name", "") ?: ""
             val peerName = prefs.getString("peer_name", "") ?: ""
+            val hostImg = prefs.getString("host_profile_img", "") ?: ""
+            val peerImg = prefs.getString("peer_profile_img", "") ?: ""
             val connectedAt = prefs.getLong("connected_at", 0L)
-            if (code.isNotBlank() && sessionId.isNotBlank()) {
-                _currentSession.value = DualVaultSession(
-                    code = code,
-                    sessionId = sessionId,
-                    isHost = isHost,
-                    isConnected = true,
-                    status = "CONNECTED",
-                    hostName = hostName,
-                    peerName = peerName,
-                    connectedAt = connectedAt
-                )
-                refreshDualVaultFiles(context)
-                startLiveSync(context, sessionId)
+            if (sessionId.isBlank()) {
+                sessionId = "dv_" + UUID.randomUUID().toString().replace("-", "").take(12)
             }
+            loadedSession = DualVaultSession(
+                code = if (code.isNotBlank()) code else "PAIRED",
+                sessionId = sessionId,
+                isHost = isHost,
+                isConnected = true,
+                status = "CONNECTED",
+                hostName = hostName,
+                peerName = peerName,
+                hostProfileImage = hostImg,
+                peerProfileImage = peerImg,
+                connectedAt = if (connectedAt > 0L) connectedAt else System.currentTimeMillis()
+            )
+        }
+
+        // 2. Check JSON file backup in security directory or dual vault directory
+        if (loadedSession == null) {
+            try {
+                val secDir = AppStorageHelper.getSecurityDir(context)
+                val sessionFile = File(secDir, "dual_vault_session.json")
+                val targetFile = if (sessionFile.exists() && sessionFile.length() > 0) sessionFile
+                else File(AppStorageHelper.getDualVaultDir(context), ".session_sync.json")
+
+                if (targetFile.exists() && targetFile.length() > 0) {
+                    val json = JSONObject(targetFile.readText(StandardCharsets.UTF_8))
+                    if (json.optBoolean("is_connected", false)) {
+                        loadedSession = DualVaultSession(
+                            code = json.optString("code", "PAIRED"),
+                            sessionId = json.optString("session_id", "dv_" + UUID.randomUUID().toString().replace("-", "").take(12)),
+                            isHost = json.optBoolean("is_host", false),
+                            isConnected = true,
+                            status = "CONNECTED",
+                            hostName = json.optString("host_name", ""),
+                            peerName = json.optString("peer_name", ""),
+                            hostProfileImage = json.optString("host_profile_img", ""),
+                            peerProfileImage = json.optString("peer_profile_img", ""),
+                            connectedAt = json.optLong("connected_at", System.currentTimeMillis())
+                        )
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
+        // Apply loaded session
+        if (loadedSession != null && loadedSession.isConnected) {
+            _currentSession.value = loadedSession
+            persistSession(context, loadedSession)
+            refreshDualVaultFiles(context)
+            startLiveSync(context, loadedSession.sessionId)
         }
     }
 
     private fun persistSession(context: Context, session: DualVaultSession) {
+        // 1. SharedPreferences (synchronous commit)
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putBoolean("is_connected", session.isConnected)
@@ -112,13 +162,90 @@ object FirebaseBridgeManager {
             .putBoolean("is_host", session.isHost)
             .putString("host_name", session.hostName)
             .putString("peer_name", session.peerName)
+            .putString("host_profile_img", session.hostProfileImage)
+            .putString("peer_profile_img", session.peerProfileImage)
             .putLong("connected_at", session.connectedAt)
-            .apply()
+            .commit()
+
+        // 2. Storage file backup in security directory
+        try {
+            val secDir = AppStorageHelper.getSecurityDir(context)
+            val sessionFile = File(secDir, "dual_vault_session.json")
+            val json = JSONObject().apply {
+                put("is_connected", session.isConnected)
+                put("code", session.code)
+                put("session_id", session.sessionId)
+                put("is_host", session.isHost)
+                put("host_name", session.hostName)
+                put("peer_name", session.peerName)
+                put("host_profile_img", session.hostProfileImage)
+                put("peer_profile_img", session.peerProfileImage)
+                put("connected_at", session.connectedAt)
+            }
+            sessionFile.writeText(json.toString(), StandardCharsets.UTF_8)
+
+            // Mirror backup in Dual Vault directory
+            val dualDir = AppStorageHelper.getDualVaultDir(context)
+            File(dualDir, ".session_sync.json").writeText(json.toString(), StandardCharsets.UTF_8)
+        } catch (_: Throwable) {}
+
+        // 3. Update fingerprint backup file if registered
+        if (session.isConnected) {
+            try {
+                AppSecurityManager.updateFingerprintDualVaultDataIfRegistered(context)
+            } catch (_: Throwable) {}
+        }
     }
 
     private fun clearPersistedSession(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
+        prefs.edit().clear().commit()
+        try {
+            val secDir = AppStorageHelper.getSecurityDir(context)
+            File(secDir, "dual_vault_session.json").delete()
+            val dualDir = AppStorageHelper.getDualVaultDir(context)
+            File(dualDir, ".session_sync.json").delete()
+            AppSecurityManager.clearFingerprintDualVaultData(context)
+        } catch (_: Throwable) {}
+    }
+
+    /**
+     * Restores dual vault pairing details from fingerprint.dat and immediately auto-connects.
+     */
+    fun restoreSessionFromFingerprint(
+        context: Context,
+        code: String,
+        sessionId: String,
+        isHost: Boolean,
+        isConnected: Boolean,
+        hostName: String,
+        peerName: String,
+        hostProfileImage: String = "",
+        peerProfileImage: String = "",
+        connectedAt: Long = System.currentTimeMillis()
+    ) {
+        if (code.isBlank() || sessionId.isBlank()) return
+        // Do not downgrade an existing connected session with a disconnected one
+        if (!isConnected && _currentSession.value.isConnected) return
+
+        val session = DualVaultSession(
+            code = code,
+            sessionId = sessionId,
+            isHost = isHost,
+            isConnected = isConnected,
+            status = if (isConnected) "CONNECTED" else "WAITING",
+            hostName = hostName,
+            peerName = peerName,
+            hostProfileImage = hostProfileImage,
+            peerProfileImage = peerProfileImage,
+            connectedAt = connectedAt
+        )
+        _currentSession.value = session
+        persistSession(context, session)
+        refreshDualVaultFiles(context)
+        if (isConnected) {
+            startLiveSync(context, sessionId)
+        }
     }
 
     /**
@@ -153,6 +280,7 @@ object FirebaseBridgeManager {
             val sessionId = "dv_" + UUID.randomUUID().toString().replace("-", "").take(12)
             val profile = ProfileManager.userProfile.value
             val hostName = profile?.fullName?.takeIf { it.isNotBlank() } ?: "User_${code.takeLast(4)}"
+            val hostImg = profile?.profileImageBase64 ?: ""
             val deviceId = getDeviceId(context)
 
             val payload = JSONObject().apply {
@@ -161,6 +289,7 @@ object FirebaseBridgeManager {
                 put("status", "WAITING")
                 put("hostId", deviceId)
                 put("hostName", hostName)
+                put("hostProfileImage", hostImg)
                 put("createdAt", System.currentTimeMillis())
             }
 
@@ -179,7 +308,8 @@ object FirebaseBridgeManager {
                 isHost = true,
                 isConnected = false,
                 status = "WAITING",
-                hostName = hostName
+                hostName = hostName,
+                hostProfileImage = hostImg
             )
 
             // Start polling for peer to join
@@ -227,8 +357,10 @@ object FirebaseBridgeManager {
 
             val sessionId = roomJson.optString("sessionId", "dv_session")
             val hostName = roomJson.optString("hostName", "Peer User")
+            val hostProfileImg = roomJson.optString("hostProfileImage", "")
             val profile = ProfileManager.userProfile.value
             val peerName = profile?.fullName?.takeIf { it.isNotBlank() } ?: "Peer_${trimmedCode.takeLast(4)}"
+            val peerProfileImg = profile?.profileImageBase64 ?: ""
             val deviceId = getDeviceId(context)
 
             // Update status to CONNECTED via PATCH
@@ -236,6 +368,7 @@ object FirebaseBridgeManager {
                 put("status", "CONNECTED")
                 put("peerId", deviceId)
                 put("peerName", peerName)
+                put("peerProfileImage", peerProfileImg)
                 put("connectedAt", System.currentTimeMillis())
             }
 
@@ -257,6 +390,8 @@ object FirebaseBridgeManager {
                 status = "CONNECTED",
                 hostName = hostName,
                 peerName = peerName,
+                hostProfileImage = hostProfileImg,
+                peerProfileImage = peerProfileImg,
                 connectedAt = System.currentTimeMillis()
             )
             _currentSession.value = session
@@ -264,6 +399,13 @@ object FirebaseBridgeManager {
 
             // Refresh dual vault local storage
             refreshDualVaultFiles(context)
+
+            // Show paired notification
+            NotificationHelper.showNotification(
+                context,
+                "Dual Vault Paired",
+                "Connected with $hostName. Photos in combined vault are now live-synced."
+            )
 
             // Start live 10-second auto-synchronization loop
             startLiveSync(context, sessionId)
@@ -297,16 +439,27 @@ object FirebaseBridgeManager {
                         if (status == "CONNECTED") {
                             val hostName = json.optString("hostName", "Host User")
                             val peerName = json.optString("peerName", "Peer User")
+                            val hostImg = json.optString("hostProfileImage", _currentSession.value.hostProfileImage)
+                            val peerImg = json.optString("peerProfileImage", "")
                             val connectedSession = _currentSession.value.copy(
                                 isConnected = true,
                                 status = "CONNECTED",
                                 hostName = hostName,
                                 peerName = peerName,
+                                hostProfileImage = hostImg,
+                                peerProfileImage = peerImg,
                                 connectedAt = json.optLong("connectedAt", System.currentTimeMillis())
                             )
                             _currentSession.value = connectedSession
                             persistSession(context, connectedSession)
                             isPolling = false
+
+                            NotificationHelper.showNotification(
+                                context,
+                                "Dual Vault Paired",
+                                "Connected with $peerName. Photos in combined vault are now live-synced."
+                            )
+
                             // Peer joined! Start live background image syncing (every 10s)
                             startLiveSync(context, sessionId)
                             break
@@ -359,6 +512,17 @@ object FirebaseBridgeManager {
                             val statusJson = JSONObject(checkBody)
                             if (statusJson.optString("status") == "DISCONNECTED") {
                                 clearPersistedSession(context)
+                                // Automatically delete all images from local device when unpairing/disconnected
+                                try {
+                                    dualDir.listFiles()?.forEach { it.deleteRecursively() }
+                                } catch (_: Throwable) {}
+                                refreshDualVaultFiles(context)
+                                val partnerName = if (_currentSession.value.isHost) _currentSession.value.peerName else _currentSession.value.hostName
+                                NotificationHelper.showNotification(
+                                    context,
+                                    "Dual Vault Unpaired",
+                                    "${if (partnerName.isNotBlank()) partnerName else "Partner device"} disconnected. All shared vault images were automatically deleted."
+                                )
                                 _currentSession.value = DualVaultSession(status = "DISCONNECTED")
                                 isLiveSyncing = false
                                 break
@@ -386,6 +550,13 @@ object FirebaseBridgeManager {
                                 if (localFile.exists()) {
                                     localFile.delete()
                                     filesChanged = true
+                                    val partnerName = if (_currentSession.value.isHost) _currentSession.value.peerName else _currentSession.value.hostName
+                                    NotificationHelper.showNotification(
+                                        context,
+                                        "Dual Vault Update",
+                                        "${if (partnerName.isNotBlank()) partnerName else "Partner"} deleted image: $fileName",
+                                        (System.currentTimeMillis() % 100000).toInt()
+                                    )
                                 }
                             }
                         }
@@ -426,6 +597,13 @@ object FirebaseBridgeManager {
                                         val bytes = Base64.decode(base64Data, Base64.DEFAULT)
                                         targetFile.writeBytes(bytes)
                                         filesChanged = true
+                                        val senderName = item.optString("senderName", if (_currentSession.value.isHost) _currentSession.value.peerName else _currentSession.value.hostName)
+                                        NotificationHelper.showNotification(
+                                            context,
+                                            "Dual Vault Update",
+                                            "${if (senderName.isNotBlank()) senderName else "Partner"} added an image: $fileName",
+                                            (System.currentTimeMillis() % 100000).toInt()
+                                        )
                                     } catch (_: Throwable) {}
                                 }
                             }
@@ -648,6 +826,14 @@ object FirebaseBridgeManager {
         isLiveSyncing = false
         val session = _currentSession.value
         clearPersistedSession(context)
+
+        // Automatically delete all images from local storage when disconnecting/unpairing
+        try {
+            val dualDir = AppStorageHelper.getDualVaultDir(context)
+            dualDir.listFiles()?.forEach { it.deleteRecursively() }
+        } catch (_: Throwable) {}
+        refreshDualVaultFiles(context)
+
         if (session.code.isNotBlank()) {
             try {
                 val url = "$RTDB_BASE_URL/dual_vault_bridge/${session.code}.json"
@@ -667,6 +853,13 @@ object FirebaseBridgeManager {
                 httpClient.newCall(req).execute()
             } catch (_: Throwable) {}
         }
+
+        NotificationHelper.showNotification(
+            context,
+            "Dual Vault Unpaired",
+            "Dual Vault unlinked. All shared images were automatically deleted from this device."
+        )
+
         _currentSession.value = DualVaultSession(status = "DISCONNECTED")
     }
 

@@ -139,7 +139,7 @@ fun AppLockScreen(
     fun launchBiometricPrompt() {
         val activity = context as? FragmentActivity ?: return
         val bioStatus = AppSecurityManager.checkBiometricStatus(context)
-        if (bioStatus != BiometricAvailability.AVAILABLE) return
+        if (bioStatus == BiometricAvailability.NO_HARDWARE) return
 
         val executor = ContextCompat.getMainExecutor(context)
         val prompt = BiometricPrompt(activity, executor, object : BiometricPrompt.AuthenticationCallback() {
@@ -174,7 +174,7 @@ fun AppLockScreen(
         try {
             prompt.authenticate(promptInfo)
         } catch (e: Throwable) {
-            e.printStackTrace()
+            errorMessage = "Biometric sensor busy or locked. Please use 6-Digit PIN."
         }
     }
 

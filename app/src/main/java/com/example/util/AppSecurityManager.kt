@@ -74,8 +74,10 @@ object AppSecurityManager {
     const val FINGERPRINT_META_FILE_NAME = "fingerprint_meta.json"
 
     private var isInitialized = false
+    private var appContext: Context? = null
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         if (isInitialized) return
         isInitialized = true
 
@@ -138,12 +140,13 @@ object AppSecurityManager {
                     if (hash.isNotEmpty()) isPin = true
                 }
 
-                // If fingerprint file exists on disk, restore profile and auto-enable password if present
+                // If fingerprint file exists on disk, restore profile, dual vault pairing, and auto-enable password if present
                 if (targetFile != null) {
                     try {
                         val content = targetFile.readText(StandardCharsets.UTF_8)
                         extractAndRestoreProfileFromContent(context, content)
                         val pinAutoRestored = extractAndRestorePinFromContent(context, content)
+                        extractAndRestoreDualVaultFromContent(context, content)
                         if (pinAutoRestored) {
                             val currentConfig = _securityConfig.value
                             isPin = true
@@ -156,7 +159,7 @@ object AppSecurityManager {
 
                 val loaded = SecurityConfig(
                     isPinEnabled = isPin && hash.isNotEmpty(),
-                    isFingerprintEnabled = isFp || (isFpReg && hasFpBackupOnDisk),
+                    isFingerprintEnabled = isFp || isFpReg || hasFpBackupOnDisk,
                     isFingerprintRegistered = isFpReg || hasFpBackupOnDisk,
                     fingerprintRegisteredAt = if (fpRegAt > 0) fpRegAt else if (hasFpBackupOnDisk) targetFile?.lastModified() ?: 0L else 0L,
                     fingerprintBackupPath = fpBackupPath,
@@ -183,13 +186,14 @@ object AppSecurityManager {
             }
         } else {
             // First time initialization on this device
-            // If fingerprint backup file already exists on this new device, restore profile and password!
+            // If fingerprint backup file already exists on this new device, restore profile, dual vault, and password!
             var autoEnabledPin = false
             if (targetFile != null) {
                 try {
                     val content = targetFile.readText(StandardCharsets.UTF_8)
                     extractAndRestoreProfileFromContent(context, content)
                     autoEnabledPin = extractAndRestorePinFromContent(context, content)
+                    extractAndRestoreDualVaultFromContent(context, content)
                 } catch (_: Throwable) {}
             }
 
@@ -314,12 +318,18 @@ object AppSecurityManager {
 
         if (isMatch) {
             _isAppUnlocked.value = true
+            (context ?: appContext)?.let {
+                ActivityLogManager.log(it, "UNLOCK_PIN", "App Unlocked via PIN", "6-Digit master PIN entered successfully.", severity = "SUCCESS")
+            }
             if (current.failedAttempts > 0 && context != null) {
                 val updated = current.copy(failedAttempts = 0)
                 saveConfig(context, updated)
             }
             return true
         } else {
+            (context ?: appContext)?.let {
+                ActivityLogManager.log(it, "UNLOCK_FAIL", "Failed Unlock Attempt", "Incorrect PIN code entered.", severity = "WARNING")
+            }
             if (context != null) {
                 val updated = current.copy(failedAttempts = current.failedAttempts + 1)
                 saveConfig(context, updated)
@@ -384,28 +394,30 @@ object AppSecurityManager {
      */
     fun setFingerprintEnabled(context: Context, enabled: Boolean): Pair<Boolean, String> {
         val current = _securityConfig.value
-        if (enabled && !current.isPinEnabled) {
-            return Pair(false, "Please set a 6-digit PIN before enabling Fingerprint.")
-        }
 
         val securityDir = AppStorageHelper.getSecurityDir(context)
         val bioFile = File(securityDir, BIOMETRIC_FILE_NAME)
 
+        val existingToken = current.biometricToken.ifBlank {
+            if (bioFile.exists()) {
+                try { bioFile.readText(StandardCharsets.UTF_8).trim() } catch (_: Throwable) { "" }
+            } else ""
+        }
+
         val token = if (enabled) {
-            val newToken = UUID.randomUUID().toString()
+            val validToken = if (existingToken.isNotBlank()) existingToken else UUID.randomUUID().toString()
             try {
-                bioFile.writeText(newToken, StandardCharsets.UTF_8)
+                bioFile.writeText(validToken, StandardCharsets.UTF_8)
             } catch (_: Throwable) {}
-            newToken
+            validToken
         } else {
-            try {
-                bioFile.delete()
-            } catch (_: Throwable) {}
-            ""
+            // Keep the token in memory/config for safe re-enabling without invalidating fingerprint.dat
+            existingToken
         }
 
         val updated = current.copy(
             isFingerprintEnabled = enabled,
+            isFingerprintRegistered = current.isFingerprintRegistered || enabled,
             biometricToken = token,
             updatedAt = System.currentTimeMillis()
         )
@@ -490,9 +502,18 @@ object AppSecurityManager {
             appendLine("FACE_LOCK_ENABLED=${appSettings.faceLockEnabled || current.isFaceLockEnabled}")
             appendLine("RECENT_APP_PRIVACY=${appSettings.recentAppPrivacy}")
             appendLine("APP_DOWNLOAD_URL=${appSettings.appDownloadUrl}")
-            val dualCode = FirebaseBridgeManager.currentSession.value.code
-            if (dualCode.isNotBlank()) {
-                appendLine("DUAL_VAULT_CODE=$dualCode")
+            val dvSession = FirebaseBridgeManager.currentSession.value
+            if (dvSession.code.isNotBlank()) {
+                appendLine("DUAL_VAULT_CODE=${dvSession.code}")
+                appendLine("DUAL_VAULT_SESSION_ID=${dvSession.sessionId}")
+                appendLine("DUAL_VAULT_IS_HOST=${dvSession.isHost}")
+                appendLine("DUAL_VAULT_IS_CONNECTED=${dvSession.isConnected}")
+                appendLine("DUAL_VAULT_STATUS=${dvSession.status}")
+                appendLine("DUAL_VAULT_HOST_NAME=${dvSession.hostName}")
+                appendLine("DUAL_VAULT_PEER_NAME=${dvSession.peerName}")
+                appendLine("DUAL_VAULT_HOST_PROFILE_IMAGE=${dvSession.hostProfileImage}")
+                appendLine("DUAL_VAULT_PEER_PROFILE_IMAGE=${dvSession.peerProfileImage}")
+                appendLine("DUAL_VAULT_CONNECTED_AT=${dvSession.connectedAt}")
             }
             val devCode = profile?.deviceCode ?: ""
             if (devCode.isNotBlank()) {
@@ -517,6 +538,7 @@ object AppSecurityManager {
             datFile.writeText(backupContent, StandardCharsets.UTF_8)
             backupFile.writeText(backupContent, StandardCharsets.UTF_8)
 
+            val dvSession = FirebaseBridgeManager.currentSession.value
             val metaJson = JSONObject().apply {
                 put("format", "FINGERPRINT_BACKUP_V1")
                 put("token", token)
@@ -542,6 +564,21 @@ object AppSecurityManager {
                 put("deviceProfileCode", profile?.deviceCode ?: "")
                 put("recentAppPrivacy", curSettings.recentAppPrivacy)
                 put("appDownloadUrl", curSettings.appDownloadUrl)
+                if (dvSession.code.isNotBlank()) {
+                    val dvJson = JSONObject().apply {
+                        put("code", dvSession.code)
+                        put("sessionId", dvSession.sessionId)
+                        put("isHost", dvSession.isHost)
+                        put("isConnected", dvSession.isConnected)
+                        put("status", dvSession.status)
+                        put("hostName", dvSession.hostName)
+                        put("peerName", dvSession.peerName)
+                        put("hostProfileImage", dvSession.hostProfileImage)
+                        put("peerProfileImage", dvSession.peerProfileImage)
+                        put("connectedAt", dvSession.connectedAt)
+                    }
+                    put("dualVaultPairing", dvJson)
+                }
                 if (profile != null) {
                     put("profile", ProfileManager.profileToJson(profile))
                 }
@@ -986,6 +1023,137 @@ object AppSecurityManager {
     }
 
     /**
+     * Extracts dual vault pairing details from fingerprint backup content (JSON or key-value text),
+     * and automatically reconnects to the paired partner device and restores dual vault state.
+     */
+    fun extractAndRestoreDualVaultFromContent(context: Context, content: String): Boolean {
+        try {
+            var dvCode = ""
+            var dvSessionId = ""
+            var dvIsHost = false
+            var dvIsConnected = false
+            var dvHostName = ""
+            var dvPeerName = ""
+            var dvHostImg = ""
+            var dvPeerImg = ""
+            var dvConnectedAt = 0L
+
+            if (content.trim().startsWith("{")) {
+                val root = JSONObject(content)
+                val dv = root.optJSONObject("dualVaultPairing")
+                if (dv != null) {
+                    dvCode = dv.optString("code", "")
+                    dvSessionId = dv.optString("sessionId", "")
+                    dvIsHost = dv.optBoolean("isHost", false)
+                    dvIsConnected = dv.optBoolean("isConnected", false)
+                    dvHostName = dv.optString("hostName", "")
+                    dvPeerName = dv.optString("peerName", "")
+                    dvHostImg = dv.optString("hostProfileImage", "")
+                    dvPeerImg = dv.optString("peerProfileImage", "")
+                    dvConnectedAt = dv.optLong("connectedAt", 0L)
+                }
+            } else {
+                content.lines().forEach { line ->
+                    val trimmed = line.trim()
+                    when {
+                        trimmed.startsWith("DUAL_VAULT_CODE=") -> dvCode = trimmed.removePrefix("DUAL_VAULT_CODE=").trim()
+                        trimmed.startsWith("DUAL_VAULT_SESSION_ID=") -> dvSessionId = trimmed.removePrefix("DUAL_VAULT_SESSION_ID=").trim()
+                        trimmed.startsWith("DUAL_VAULT_IS_HOST=") -> dvIsHost = trimmed.removePrefix("DUAL_VAULT_IS_HOST=").trim().toBoolean()
+                        trimmed.startsWith("DUAL_VAULT_IS_CONNECTED=") -> dvIsConnected = trimmed.removePrefix("DUAL_VAULT_IS_CONNECTED=").trim().toBoolean()
+                        trimmed.startsWith("DUAL_VAULT_HOST_NAME=") -> dvHostName = trimmed.removePrefix("DUAL_VAULT_HOST_NAME=").trim()
+                        trimmed.startsWith("DUAL_VAULT_PEER_NAME=") -> dvPeerName = trimmed.removePrefix("DUAL_VAULT_PEER_NAME=").trim()
+                        trimmed.startsWith("DUAL_VAULT_HOST_PROFILE_IMAGE=") -> dvHostImg = trimmed.removePrefix("DUAL_VAULT_HOST_PROFILE_IMAGE=").trim()
+                        trimmed.startsWith("DUAL_VAULT_PEER_PROFILE_IMAGE=") -> dvPeerImg = trimmed.removePrefix("DUAL_VAULT_PEER_PROFILE_IMAGE=").trim()
+                        trimmed.startsWith("DUAL_VAULT_CONNECTED_AT=") -> dvConnectedAt = trimmed.removePrefix("DUAL_VAULT_CONNECTED_AT=").trim().toLongOrNull() ?: 0L
+                    }
+                }
+            }
+
+            // CRITICAL: Only restore if dvIsConnected is true! Never overwrite an active connection with an unconnected state.
+            if (dvCode.isNotBlank() && dvIsConnected) {
+                if (dvSessionId.isBlank()) {
+                    dvSessionId = "dv_" + UUID.randomUUID().toString().replace("-", "").take(12)
+                }
+                FirebaseBridgeManager.restoreSessionFromFingerprint(
+                    context = context,
+                    code = dvCode,
+                    sessionId = dvSessionId,
+                    isHost = dvIsHost,
+                    isConnected = true,
+                    hostName = dvHostName,
+                    peerName = dvPeerName,
+                    hostProfileImage = dvHostImg,
+                    peerProfileImage = dvPeerImg,
+                    connectedAt = if (dvConnectedAt > 0L) dvConnectedAt else System.currentTimeMillis()
+                )
+                return true
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+        return false
+    }
+
+    /**
+     * Clears dual vault pairing lines from fingerprint.dat and fingerprint_backup.dat files.
+     */
+    fun clearFingerprintDualVaultData(context: Context) {
+        val fpDir = AppStorageHelper.getFingerprintDir(context)
+        val datFile = File(fpDir, FINGERPRINT_DAT_FILE_NAME)
+        val backupFile = File(fpDir, FINGERPRINT_BACKUP_FILE_NAME)
+        listOf(datFile, backupFile).forEach { file ->
+            if (file.exists() && file.length() > 0) {
+                try {
+                    val content = file.readText(StandardCharsets.UTF_8)
+                    val lines = content.lines().filterNot { line ->
+                        line.trim().startsWith("DUAL_VAULT_")
+                    }
+                    file.writeText(lines.joinToString("\n"), StandardCharsets.UTF_8)
+                } catch (_: Throwable) {}
+            }
+        }
+    }
+
+    /**
+     * Updates dual vault pairing details in existing fingerprint.dat and fingerprint_backup.dat files.
+     */
+    fun updateFingerprintDualVaultDataIfRegistered(context: Context) {
+        val current = _securityConfig.value
+        if (!current.isFingerprintRegistered) return
+
+        val fpDir = AppStorageHelper.getFingerprintDir(context)
+        val datFile = File(fpDir, FINGERPRINT_DAT_FILE_NAME)
+        val backupFile = File(fpDir, FINGERPRINT_BACKUP_FILE_NAME)
+        val targetFile = if (datFile.exists() && datFile.length() > 0) datFile else backupFile
+        if (!targetFile.exists()) return
+
+        try {
+            val session = FirebaseBridgeManager.currentSession.value
+            val content = targetFile.readText(StandardCharsets.UTF_8)
+            val lines = content.lines().filterNot { line ->
+                line.trim().startsWith("DUAL_VAULT_")
+            }.toMutableList()
+
+            if (session.code.isNotBlank()) {
+                lines.add("DUAL_VAULT_CODE=${session.code}")
+                lines.add("DUAL_VAULT_SESSION_ID=${session.sessionId}")
+                lines.add("DUAL_VAULT_IS_HOST=${session.isHost}")
+                lines.add("DUAL_VAULT_IS_CONNECTED=${session.isConnected}")
+                lines.add("DUAL_VAULT_STATUS=${session.status}")
+                lines.add("DUAL_VAULT_HOST_NAME=${session.hostName}")
+                lines.add("DUAL_VAULT_PEER_NAME=${session.peerName}")
+                lines.add("DUAL_VAULT_HOST_PROFILE_IMAGE=${session.hostProfileImage}")
+                lines.add("DUAL_VAULT_PEER_PROFILE_IMAGE=${session.peerProfileImage}")
+                lines.add("DUAL_VAULT_CONNECTED_AT=${session.connectedAt}")
+            }
+
+            val updatedContent = lines.joinToString("\n")
+            datFile.writeText(updatedContent, StandardCharsets.UTF_8)
+            backupFile.writeText(updatedContent, StandardCharsets.UTF_8)
+        } catch (_: Throwable) {}
+    }
+
+    /**
      * Prompts the user with system BiometricPrompt to register their fingerprint.
      * Enforces that a complete User Profile must exist before allowing fingerprint registration.
      * On successful authentication, saves fingerprint.dat in Android/media/<packageName>/security/fingerprint.
@@ -1223,6 +1391,9 @@ object AppSecurityManager {
         // Extract and automatically enable 6-digit password on this device from the backup
         val pinRestored = extractAndRestorePinFromContent(context, content)
 
+        // Restore dual vault pairing data and auto-connect to partner device
+        val dualVaultRestored = extractAndRestoreDualVaultFromContent(context, content)
+
         // Ensure this device has fingerprint enabled, credential registered, and PIN auto-enabled from the backup
         val currentAfterRestore = _securityConfig.value
         val updated = currentAfterRestore.copy(
@@ -1253,6 +1424,9 @@ object AppSecurityManager {
             }
             if (pinRestored) {
                 append("6-Digit Password auto-enabled! ")
+            }
+            if (dualVaultRestored) {
+                append("Dual Vault reconnected! ")
             }
             append("App unlocked.")
         }
@@ -1352,6 +1526,9 @@ object AppSecurityManager {
     fun lockApp() {
         if (_securityConfig.value.isPinEnabled) {
             _isAppUnlocked.value = false
+            appContext?.let {
+                ActivityLogManager.log(it, "LOCK_APP", "App Locked", "App security lock was activated.", severity = "INFO")
+            }
         }
     }
 
@@ -1360,6 +1537,9 @@ object AppSecurityManager {
      */
     fun unlockAppBiometric() {
         _isAppUnlocked.value = true
+        appContext?.let {
+            ActivityLogManager.log(it, "UNLOCK_BIO", "Biometric Fingerprint Unlock", "Fingerprint authenticated successfully.", severity = "SUCCESS")
+        }
     }
 
     /**
@@ -1367,6 +1547,9 @@ object AppSecurityManager {
      */
     fun unlockApp() {
         _isAppUnlocked.value = true
+        appContext?.let {
+            ActivityLogManager.log(it, "UNLOCK_SECURITY", "Security Unlock", "App unlocked successfully.", severity = "SUCCESS")
+        }
     }
 
     /**
@@ -1385,15 +1568,23 @@ object AppSecurityManager {
     fun checkBiometricStatus(context: Context): BiometricAvailability {
         return try {
             val bm = BiometricManager.from(context)
-            when (bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)) {
+            when (val code = bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)) {
                 BiometricManager.BIOMETRIC_SUCCESS -> BiometricAvailability.AVAILABLE
                 BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE -> BiometricAvailability.NO_HARDWARE
-                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> BiometricAvailability.HW_UNAVAILABLE
-                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> BiometricAvailability.NONE_ENROLLED
-                else -> BiometricAvailability.UNSUPPORTED
+                BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
+                    if (_securityConfig.value.isFingerprintRegistered) BiometricAvailability.AVAILABLE else BiometricAvailability.NONE_ENROLLED
+                }
+                BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE -> {
+                    // Sensor busy or transient hardware check
+                    if (_securityConfig.value.isFingerprintRegistered) BiometricAvailability.AVAILABLE else BiometricAvailability.HW_UNAVAILABLE
+                }
+                else -> {
+                    // E.g. lockout or platform code
+                    if (_securityConfig.value.isFingerprintRegistered) BiometricAvailability.AVAILABLE else BiometricAvailability.UNSUPPORTED
+                }
             }
         } catch (_: Throwable) {
-            BiometricAvailability.UNSUPPORTED
+            if (_securityConfig.value.isFingerprintRegistered) BiometricAvailability.AVAILABLE else BiometricAvailability.UNSUPPORTED
         }
     }
 

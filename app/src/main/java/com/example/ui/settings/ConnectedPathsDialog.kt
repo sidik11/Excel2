@@ -142,9 +142,20 @@ fun ConnectedPathsDialog(
                     path = dbFile.absolutePath,
                     exists = dbFile.exists(),
                     fileCount = if (dbFile.exists()) 1 else 0
+                ),
+                PathItem(
+                    title = "Activity Timeline Log",
+                    description = "Offline audit logs at media/activity/activity.json",
+                    path = File(dedicated, "activity/activity.json").absolutePath,
+                    exists = File(dedicated, "activity/activity.json").exists(),
+                    fileCount = if (File(dedicated, "activity/activity.json").exists()) 1 else 0
                 )
             )
         }
+    }
+
+    androidx.activity.compose.BackHandler {
+        onDismiss()
     }
 
     Dialog(

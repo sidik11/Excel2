@@ -38,6 +38,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -46,8 +49,10 @@ import coil.compose.AsyncImage
 import com.example.ui.components.ZoomableBox
 import com.example.util.DualVaultFileInfo
 import com.example.util.FirebaseBridgeManager
+import com.example.util.SettingsManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -66,6 +71,7 @@ fun DualVaultConnectDialog(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val session by FirebaseBridgeManager.currentSession.collectAsState()
+    val settings by SettingsManager.settings.collectAsState()
 
     var currentMode by remember(session.isConnected) {
         mutableStateOf(if (session.isConnected) DualVaultMode.COMBINED_VAULT else DualVaultMode.CHOOSE)
@@ -148,14 +154,28 @@ fun DualVaultConnectDialog(
         Toast.makeText(context, "Pairing code copied!", Toast.LENGTH_SHORT).show()
     }
 
+    androidx.activity.compose.BackHandler {
+        if (selectedPreviewFile != null) {
+            selectedPreviewFile = null
+        } else if (isSlideshowOpen) {
+            isSlideshowOpen = false
+        } else {
+            onDismiss()
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.90f)
+                .fillMaxHeight(0.92f)
                 .clip(RoundedCornerShape(20.dp)),
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
@@ -172,31 +192,32 @@ fun DualVaultConnectDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                            color = if (session.isConnected) Color(0xFF10B981).copy(alpha = 0.15f) else MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.size(38.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = Icons.Default.SyncAlt,
+                                    imageVector = if (session.isConnected) Icons.Default.FolderSpecial else Icons.Default.SyncAlt,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
+                                    tint = if (session.isConnected) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
+                            val partner = if (session.isHost) session.peerName.ifBlank { "Partner" } else session.hostName.ifBlank { "Host" }
                             Text(
-                                text = "Dual Vault Device Pairing",
+                                text = if (session.isConnected) "Combined Vault" else "Dual Vault Device Pairing",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (session.isConnected) "Connected • Auto-Sync 10s Active" else "Cross-Device Media Vault",
+                                text = if (session.isConnected) "Paired with $partner • Auto-Sync Active" else "Cross-Device Media Vault",
                                 fontSize = 11.sp,
                                 color = if (session.isConnected) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = if (session.isConnected) FontWeight.SemiBold else FontWeight.Normal
@@ -204,8 +225,11 @@ fun DualVaultConnectDialog(
                         }
                     }
 
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(18.dp))
+                    FilledTonalIconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(40.dp).testTag("btn_close_dual_vault_dialog")
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(20.dp))
                     }
                 }
 
@@ -326,106 +350,58 @@ fun DualVaultConnectDialog(
                                 }
                             }
 
-                            // Single device connection exclusivity notice
-                            if (session.isConnected) {
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xFF10B981).copy(alpha = 0.12f),
-                                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f)),
-                                    modifier = Modifier.fillMaxWidth(0.9f)
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Active Pairing Connected", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF10B981))
-                                        }
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            "Paired with ${if (session.isHost) session.peerName.ifBlank { "Peer Device" } else session.hostName.ifBlank { "Host Device" }}. Only 1 active device connection is allowed. You must disconnect before pairing with another device.",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Spacer(modifier = Modifier.height(10.dp))
-                                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Button(
-                                                onClick = { currentMode = DualVaultMode.COMBINED_VAULT },
-                                                shape = RoundedCornerShape(8.dp),
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Text("Open Vault", fontSize = 12.sp)
-                                            }
-                                            OutlinedButton(
-                                                onClick = {
-                                                    coroutineScope.launch {
-                                                        FirebaseBridgeManager.disconnect(context)
-                                                        Toast.makeText(context, "Pairing disconnected", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                },
-                                                shape = RoundedCornerShape(8.dp),
-                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                                modifier = Modifier.weight(1f)
-                                            ) {
-                                                Text("Disconnect", fontSize = 12.sp)
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                                // Choice 1: Show Code
-                                Button(
-                                    onClick = {
-                                        coroutineScope.launch {
-                                            isLoading = true
-                                            errorMessage = null
-                                            val res = FirebaseBridgeManager.createPairingRoom(context)
-                                            isLoading = false
-                                            if (res.isSuccess) {
-                                                generatedCode = res.getOrThrow()
-                                                currentMode = DualVaultMode.SHOW_CODE
-                                            } else {
-                                                errorMessage = res.exceptionOrNull()?.message
-                                            }
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    enabled = !isLoading,
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.85f)
-                                        .testTag("btn_show_pairing_code")
-                                ) {
-                                    Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Show My 10-Digit Code", fontWeight = FontWeight.Bold)
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-
-                                // Choice 2: Enter Code
-                                OutlinedButton(
-                                    onClick = {
+                            // Choice 1: Show Code
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        isLoading = true
                                         errorMessage = null
-                                        currentMode = DualVaultMode.ENTER_CODE
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    enabled = !isLoading,
-                                    modifier = Modifier
-                                        .fillMaxWidth(0.85f)
-                                        .testTag("btn_enter_pairing_code")
-                                ) {
-                                    Icon(Icons.Default.Pin, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Enter Other User's Code", fontWeight = FontWeight.Bold)
-                                }
-
-                                if (session.dualVaultFiles.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(14.dp))
-                                    TextButton(onClick = { currentMode = DualVaultMode.COMBINED_VAULT }) {
-                                        Text("Browse Local Dual Vault Files (${session.dualVaultFiles.size})")
+                                        val res = FirebaseBridgeManager.createPairingRoom(context)
+                                        isLoading = false
+                                        if (res.isSuccess) {
+                                            generatedCode = res.getOrThrow()
+                                            currentMode = DualVaultMode.SHOW_CODE
+                                        } else {
+                                            errorMessage = res.exceptionOrNull()?.message
+                                        }
                                     }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = !isLoading,
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .testTag("btn_show_pairing_code")
+                            ) {
+                                Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Show My 10-Digit Code", fontWeight = FontWeight.Bold)
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Choice 2: Enter Code
+                            OutlinedButton(
+                                onClick = {
+                                    errorMessage = null
+                                    currentMode = DualVaultMode.ENTER_CODE
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = !isLoading,
+                                modifier = Modifier
+                                    .fillMaxWidth(0.85f)
+                                    .testTag("btn_enter_pairing_code")
+                            ) {
+                                Icon(Icons.Default.Pin, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Enter Other User's Code", fontWeight = FontWeight.Bold)
+                            }
+
+                            if (session.dualVaultFiles.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(14.dp))
+                                TextButton(onClick = { currentMode = DualVaultMode.COMBINED_VAULT }) {
+                                    Text("Browse Local Dual Vault Files (${session.dualVaultFiles.size})")
                                 }
                             }
                         }
@@ -621,22 +597,32 @@ fun DualVaultConnectDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = Color(0xFF10B981),
-                                            modifier = Modifier.size(10.dp)
-                                        ) {}
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        // Paired Profile Images beside connected status
+                                        DualVaultPairAvatars(
+                                            hostImage = session.hostProfileImage,
+                                            hostName = session.hostName.ifBlank { "Host" },
+                                            peerImage = session.peerProfileImage,
+                                            peerName = session.peerName.ifBlank { "Peer" }
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
                                         Column {
                                             val partner = if (session.isHost) session.peerName.ifBlank { "Connected Peer" } else session.hostName.ifBlank { "Host" }
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Surface(
+                                                    shape = CircleShape,
+                                                    color = Color(0xFF10B981),
+                                                    modifier = Modifier.size(8.dp)
+                                                ) {}
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Paired: $partner",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
                                             Text(
-                                                text = "Paired with $partner",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = "Auto-sync every 10s • ${session.dualVaultFiles.size} photos in Android/media/Dual_Vault",
+                                                text = "Auto-sync active • ${session.dualVaultFiles.size} photos in Dual_Vault",
                                                 fontSize = 11.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -690,10 +676,10 @@ fun DualVaultConnectDialog(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // Action buttons: Upload Photos, Slideshow, Files
+                            // Action buttons: Upload Photos, Slideshow (Files option removed)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Button(
                                     onClick = {
@@ -703,12 +689,12 @@ fun DualVaultConnectDialog(
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
-                                        .weight(1.2f)
+                                        .weight(1.3f)
                                         .testTag("btn_add_dual_vault_photos")
                                 ) {
                                     Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Upload Photos", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    Text("Upload Photos", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 }
 
                                 // Slideshow Button
@@ -724,18 +710,6 @@ fun DualVaultConnectDialog(
                                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("Slideshow", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
-
-                                OutlinedButton(
-                                    onClick = {
-                                        filePickerLauncher.launch(arrayOf("image/*"))
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.weight(0.9f).testTag("btn_browse_dual_files")
-                                ) {
-                                    Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Files", fontSize = 12.sp)
                                 }
                             }
 
@@ -849,9 +823,11 @@ fun DualVaultConnectDialog(
                                 Button(
                                     onClick = onDismiss,
                                     shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f).testTag("btn_close_dual_vault_done")
                                 ) {
-                                    Text("Done", fontWeight = FontWeight.Bold)
+                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Close Vault", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -861,82 +837,152 @@ fun DualVaultConnectDialog(
         }
     }
 
-    // Photo Full Preview Dialog
+    // Full-Screen Photo Modal Dialog
     selectedPreviewFile?.let { previewItem ->
-        Dialog(onDismissRequest = { selectedPreviewFile = null }) {
+        val fileList = session.dualVaultFiles
+        var currentModalIndex by remember(previewItem) {
+            mutableIntStateOf(fileList.indexOf(previewItem).coerceAtLeast(0))
+        }
+        val currentModalFile = fileList.getOrNull(currentModalIndex) ?: previewItem
+
+        Dialog(
+            onDismissRequest = { selectedPreviewFile = null },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
+        ) {
+            androidx.activity.compose.BackHandler {
+                selectedPreviewFile = null
+            }
             Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth(0.95f).wrapContentHeight()
+                modifier = Modifier.fillMaxSize(),
+                color = Color.Black
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Fullscreen interactive photo with pinch-to-zoom and swipe
+                    ZoomableBox(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(fileList.size) {
+                                detectHorizontalDragGestures { _, dragAmount ->
+                                    if (dragAmount > 60) {
+                                        if (currentModalIndex > 0) currentModalIndex--
+                                        else if (fileList.isNotEmpty()) currentModalIndex = fileList.size - 1
+                                    } else if (dragAmount < -60) {
+                                        if (fileList.isNotEmpty()) currentModalIndex = (currentModalIndex + 1) % fileList.size
+                                    }
+                                }
+                            }
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(previewItem.fileName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("Size: ${previewItem.fileSizeBytes / 1024} KB • Added by: ${previewItem.addedBy}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        IconButton(onClick = { selectedPreviewFile = null }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(18.dp))
-                        }
+                        AsyncImage(
+                            model = currentModalFile.localFile,
+                            contentDescription = currentModalFile.fileName,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Box(
+                    // Top Fullscreen Header Bar
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.75f),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(320.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black)
+                            .align(Alignment.TopCenter)
+                            .statusBarsPadding()
                     ) {
-                        ZoomableBox(modifier = Modifier.fillMaxSize()) {
-                            AsyncImage(
-                                model = previewItem.localFile,
-                                contentDescription = previewItem.fileName,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            IconButton(
+                                onClick = { selectedPreviewFile = null },
+                                modifier = Modifier.size(40.dp).testTag("btn_close_photo_modal")
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close", tint = Color.White)
+                            }
+                            Column(
+                                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = currentModalFile.fileName,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${currentModalIndex + 1} of ${fileList.size} • ${currentModalFile.fileSizeBytes / 1024} KB • Added by: ${currentModalFile.addedBy}",
+                                    fontSize = 11.sp,
+                                    color = Color.LightGray,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(
+                                onClick = {
+                                    slideshowStartIndex = currentModalIndex
+                                    selectedPreviewFile = null
+                                    isSlideshowOpen = true
+                                },
+                                modifier = Modifier.size(40.dp).testTag("btn_modal_start_slideshow")
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = "Slideshow", tint = Color.White)
+                            }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // Bottom Fullscreen Action Bar
+                    Surface(
+                        color = Color.Black.copy(alpha = 0.75f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
                     ) {
-                        // Start Slideshow from here
-                        FilledTonalButton(
-                            onClick = {
-                                val idx = session.dualVaultFiles.indexOf(previewItem)
-                                slideshowStartIndex = if (idx >= 0) idx else 0
-                                selectedPreviewFile = null
-                                isSlideshowOpen = true
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Slideshow", fontSize = 12.sp)
-                        }
+                            IconButton(
+                                onClick = {
+                                    if (currentModalIndex > 0) currentModalIndex--
+                                    else if (fileList.isNotEmpty()) currentModalIndex = fileList.size - 1
+                                },
+                                enabled = fileList.size > 1
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Previous", tint = Color.White, modifier = Modifier.size(26.dp))
+                            }
 
-                        // Delete button
-                        Button(
-                            onClick = {
-                                fileToDelete = previewItem
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Delete", fontSize = 12.sp)
+                            Button(
+                                onClick = {
+                                    fileToDelete = currentModalFile
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("btn_modal_delete_photo")
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Delete Photo", fontSize = 12.sp)
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    if (fileList.isNotEmpty()) currentModalIndex = (currentModalIndex + 1) % fileList.size
+                                },
+                                enabled = fileList.size > 1
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(26.dp))
+                            }
                         }
                     }
                 }
@@ -991,6 +1037,7 @@ fun DualVaultConnectDialog(
         DualVaultSlideshowDialog(
             files = session.dualVaultFiles,
             initialIndex = slideshowStartIndex,
+            slideshowIntervalSeconds = settings.dualVaultSlideshowIntervalSeconds,
             onDismiss = { isSlideshowOpen = false },
             onDelete = { item ->
                 fileToDelete = item
@@ -1001,23 +1048,26 @@ fun DualVaultConnectDialog(
 
 /**
  * Dedicated Slideshow Player for Dual Vault Images.
- * Auto-advances every 3.5 seconds with play/pause, next/prev, and auto-delete.
+ * Configurable 1s - 5s speed setting with play/pause, next/prev, and auto-delete.
  */
 @Composable
-private fun DualVaultSlideshowDialog(
+internal fun DualVaultSlideshowDialog(
     files: List<DualVaultFileInfo>,
     initialIndex: Int,
+    slideshowIntervalSeconds: Int = 3,
     onDismiss: () -> Unit,
     onDelete: (DualVaultFileInfo) -> Unit
 ) {
     var currentIndex by remember { mutableIntStateOf(initialIndex.coerceIn(0, (files.size - 1).coerceAtLeast(0))) }
     var isPlaying by remember { mutableStateOf(true) }
-    var intervalMs by remember { mutableLongStateOf(3500L) }
+    var currentIntervalSec by remember(slideshowIntervalSeconds) {
+        mutableIntStateOf(slideshowIntervalSeconds.coerceIn(1, 5))
+    }
 
     // Auto-advance loop
-    LaunchedEffect(isPlaying, currentIndex, files.size, intervalMs) {
+    LaunchedEffect(isPlaying, currentIndex, files.size, currentIntervalSec) {
         if (isPlaying && files.isNotEmpty()) {
-            delay(intervalMs)
+            delay(currentIntervalSec * 1000L)
             currentIndex = (currentIndex + 1) % files.size
         }
     }
@@ -1066,7 +1116,7 @@ private fun DualVaultSlideshowDialog(
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(vertical = 60.dp)
+                            .padding(vertical = 70.dp)
                     )
                 }
 
@@ -1111,7 +1161,7 @@ private fun DualVaultSlideshowDialog(
 
                 // Bottom Control Bar
                 Surface(
-                    color = Color.Black.copy(alpha = 0.8f),
+                    color = Color.Black.copy(alpha = 0.85f),
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
@@ -1120,16 +1170,42 @@ private fun DualVaultSlideshowDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
-                        currentFile?.let { item ->
+                        // Slideshow Speed Selector (1s, 2s, 3s, 4s, 5s)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = "Uploader: ${item.addedBy} • ${item.fileSizeBytes / 1024} KB",
-                                color = Color.Gray,
+                                text = "Speed: ",
+                                color = Color.LightGray,
                                 fontSize = 11.sp,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
+                                fontWeight = FontWeight.Medium
                             )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            listOf(1, 2, 3, 4, 5).forEach { sec ->
+                                val isSelected = currentIntervalSec == sec
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.DarkGray.copy(alpha = 0.6f),
+                                    modifier = Modifier
+                                        .padding(horizontal = 3.dp)
+                                        .clickable {
+                                            currentIntervalSec = sec
+                                            SettingsManager.setDualVaultSlideshowIntervalSeconds(sec)
+                                        }
+                                ) {
+                                    Text(
+                                        text = "${sec}s",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1183,6 +1259,100 @@ private fun DualVaultSlideshowDialog(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Avatar display showing both paired users' profile images side of connected status.
+ */
+@Composable
+fun DualVaultPairAvatars(
+    hostImage: String,
+    hostName: String,
+    peerImage: String,
+    peerName: String,
+    size: Dp = 34.dp
+) {
+    Box(contentAlignment = Alignment.Center) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy((-8).dp)
+        ) {
+            // Host Avatar
+            UserAvatarBubble(imageData = hostImage, name = hostName, size = size, borderColor = Color(0xFF107C41))
+            // Peer Avatar
+            UserAvatarBubble(imageData = peerImage, name = peerName, size = size, borderColor = Color(0xFF0288D1))
+        }
+        // Connection Link Badge
+        Surface(
+            shape = CircleShape,
+            color = Color(0xFF10B981),
+            border = BorderStroke(1.dp, Color.White),
+            modifier = Modifier
+                .size(14.dp)
+                .align(Alignment.BottomCenter)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.Link,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(9.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun UserAvatarBubble(
+    imageData: String,
+    name: String,
+    size: Dp,
+    borderColor: Color
+) {
+    val bitmap = remember(imageData) {
+        if (imageData.isBlank()) null else {
+            try {
+                val clean = if (imageData.contains(",")) imageData.substringAfter(",") else imageData
+                val bytes = android.util.Base64.decode(clean, android.util.Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } catch (_: Throwable) {
+                try {
+                    val file = File(imageData)
+                    if (file.exists()) BitmapFactory.decodeFile(file.absolutePath) else null
+                } catch (_: Throwable) {
+                    null
+                }
+            }
+        }
+    }
+
+    Surface(
+        shape = CircleShape,
+        color = borderColor.copy(alpha = 0.18f),
+        border = BorderStroke(1.5.dp, borderColor),
+        modifier = Modifier.size(size)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            if (bitmap != null) {
+                androidx.compose.foundation.Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                )
+            } else {
+                Text(
+                    text = name.take(1).uppercase().ifBlank { "?" },
+                    fontWeight = FontWeight.Bold,
+                    fontSize = (size.value * 0.42f).sp,
+                    color = borderColor
+                )
             }
         }
     }

@@ -135,6 +135,13 @@ fun MainScreen(
         }
     }
 
+    // Auto switch from Dual Vault tab to Excel if disconnected/unpaired
+    LaunchedEffect(dualSession.isConnected) {
+        if (!dualSession.isConnected && currentTab == MainAppTab.DUAL_VAULT) {
+            currentTab = MainAppTab.EXCEL_CATALOG
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier.fillMaxSize(),
@@ -373,10 +380,9 @@ fun MainScreen(
                 }
 
                 MainAppTab.DUAL_VAULT -> {
-                    // The paired vault is opened as a full dialog so the tab
-                    // never exposes the pairing-code controls while connected.
-                    DualVaultConnectDialog(
-                        onDismiss = { currentTab = if (dualSession.isConnected) MainAppTab.DUAL_VAULT else MainAppTab.SSHOW }
+                    DualVaultScreen(
+                        onCloseTab = { currentTab = MainAppTab.EXCEL_CATALOG },
+                        modifier = Modifier.weight(1f)
                     )
                 }
 
@@ -386,6 +392,9 @@ fun MainScreen(
                             viewModel.reloadPersistedData()
                             vaultViewModel.reloadSession()
                             sshowViewModel.checkStoredImages()
+                        },
+                        onOpenDualVault = {
+                            currentTab = MainAppTab.DUAL_VAULT
                         },
                         modifier = Modifier.weight(1f)
                     )

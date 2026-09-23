@@ -65,6 +65,37 @@ class SShowViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Deletes all details and files in media SShow folders when refresh is clicked.
+     */
+    fun clearSShowMediaFolder() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                loadingMessage = "Deleting all SShow media folder details..."
+            )
+            val context = getApplication<Application>()
+            try {
+                listOf(
+                    com.example.util.AppStorageHelper.getSShowStoredDir(context),
+                    com.example.util.AppStorageHelper.getSShowWorkDir(context),
+                    com.example.util.AppStorageHelper.getSShowSecureDir(context),
+                    com.example.util.AppStorageHelper.getSShowSharedDir(context)
+                ).forEach { dir ->
+                    dir.listFiles()?.forEach { file ->
+                        file.deleteRecursively()
+                    }
+                }
+                File(context.cacheDir, "sshow_temp").deleteRecursively()
+            } catch (_: Throwable) {}
+            stopSlideshow()
+            _uiState.value = SShowUiState(
+                storedCount = 0,
+                statusMessage = "All details in media SShow folder deleted successfully."
+            )
+        }
+    }
+
     fun onImagesSelectedForEncrypt(uris: List<Uri>) {
         if (uris.isEmpty()) return
         _uiState.value = _uiState.value.copy(dialog = SShowDialog.EncryptFilename(uris))

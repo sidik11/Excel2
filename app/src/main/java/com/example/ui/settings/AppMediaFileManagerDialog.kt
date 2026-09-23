@@ -70,12 +70,38 @@ fun AppMediaFileManagerDialog(
         if (isPinValid || isMasterValid) {
             isAuthenticated = true
             authError = null
+            com.example.util.ActivityLogManager.log(
+                context,
+                "FILE_MANAGER_ACCESS",
+                "App Media File Manager Unlocked",
+                "Authenticated with password/PIN to browse internal media files.",
+                severity = "INFO"
+            )
         } else if (!securityConfig.isPinEnabled && pin.length >= 4) {
             // If PIN not configured, allow access
             isAuthenticated = true
             authError = null
+            com.example.util.ActivityLogManager.log(
+                context,
+                "FILE_MANAGER_ACCESS",
+                "App Media File Manager Opened",
+                "Opened media file manager.",
+                severity = "INFO"
+            )
         } else {
             authError = "Incorrect password or PIN."
+        }
+    }
+
+    androidx.activity.compose.BackHandler {
+        if (previewImageFile != null) {
+            previewImageFile = null
+        } else if (fileDetailTarget != null) {
+            fileDetailTarget = null
+        } else if (currentDir.absolutePath != rootMediaDir.absolutePath) {
+            currentDir.parentFile?.let { currentDir = it }
+        } else {
+            onDismiss()
         }
     }
 

@@ -15,10 +15,17 @@ import com.example.util.AppSecurityManager
 import com.example.util.FirebaseBridgeManager
 import com.example.util.ProfileManager
 import com.example.util.SettingsManager
+import com.example.util.ShakeDetector
+import com.example.util.ActivityLogManager
+import com.example.util.PanicModeController
+import android.os.Vibrator
+import android.os.VibrationEffect
+import android.os.Build
 
 class MainActivity : FragmentActivity() {
 
     private var backgroundTimestamp = 0L
+    private var shakeDetector: ShakeDetector? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,15 +33,34 @@ class MainActivity : FragmentActivity() {
 
         // Initialize managers
         SettingsManager.init(this)
+        FirebaseBridgeManager.init(this)
         AppSecurityManager.init(this)
         ProfileManager.init(this)
-        FirebaseBridgeManager.init(this)
+        ActivityLogManager.init(this)
+
+        shakeDetector = ShakeDetector(this) {
+            val settings = SettingsManager.settings.value
+            if (settings.shakeToLockEnabled) {
+                // Vibrate feedback on shake lock
+                try {
+                    val vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator?.vibrate(VibrationEffect.createOneShot(150, VibrationEffect.DEFAULT_AMPLITUDE))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        vibrator?.vibrate(150)
+                    }
+                } catch (_: Throwable) {}
+                PanicModeController.triggerPanic()
+            }
+        }
 
         setContent {
             MyApplicationTheme {
                 val isUnlocked by AppSecurityManager.isAppUnlocked.collectAsState()
                 val securityConfig by AppSecurityManager.securityConfig.collectAsState()
                 val settings by SettingsManager.settings.collectAsState()
+                val isPanicActive by PanicModeController.isPanicActive.collectAsState()
 
                 // Apply Anti-Screenshot and Recent App Privacy protection (masks Recent Apps switcher)
                 LaunchedEffect(securityConfig.isAntiScreenshotEnabled, settings.recentAppPrivacy) {
@@ -48,7 +74,11 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
-                if (!isUnlocked && securityConfig.isPinEnabled) {
+                if (isPanicActive) {
+                    com.example.ui.security.PanicTreeDisguiseOverlay(
+                        onDismiss = { PanicModeController.dismissPanic() }
+                    )
+                } else if (!isUnlocked && securityConfig.isPinEnabled) {
                     AppLockScreen(
                         onUnlocked = {
                             // App is unlocked, state updates automatically
@@ -59,6 +89,17 @@ class MainActivity : FragmentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        shakeDetector?.start()
+        FirebaseBridgeManager.init(this)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        shakeDetector?.stop()
     }
 
     override fun onStop() {

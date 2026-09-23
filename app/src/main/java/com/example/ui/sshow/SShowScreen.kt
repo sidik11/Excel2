@@ -452,17 +452,16 @@ fun SShowScreen(
                 }
             }
 
-            // Refresh button
+            // Refresh button (deletes all details in media sshow folder)
             FloatingActionButton(
                 onClick = {
-                    viewModel.checkStoredImages()
-                    viewModel.clearStatus()
+                    viewModel.clearSShowMediaFolder()
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.size(48.dp).testTag("sshow_refresh_btn")
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                Icon(Icons.Default.Refresh, contentDescription = "Refresh & Clear Media SShow Details")
             }
         }
 

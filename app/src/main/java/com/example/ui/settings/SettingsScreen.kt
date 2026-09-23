@@ -54,12 +54,27 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Vibration
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Warning
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import com.example.util.FirebaseBridgeManager
+import com.example.util.PanicModeController
+import kotlinx.coroutines.launch
 import androidx.fragment.app.FragmentActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -98,10 +113,20 @@ import com.example.util.AppStorageHelper
 import com.example.util.BiometricAvailability
 import com.example.util.ProfileManager
 import com.example.util.SettingsManager
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import com.example.R
 
 @Composable
 fun SettingsScreen(
     onRestoreComplete: (() -> Unit)? = null,
+    onOpenDualVault: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val settings by SettingsManager.settings.collectAsState()
@@ -120,6 +145,38 @@ fun SettingsScreen(
     var showDualVaultDialog by remember { mutableStateOf(false) }
     var showFileManagerDialog by remember { mutableStateOf(false) }
     var showFaceSetupDialog by remember { mutableStateOf(false) }
+    var showActivityTimelineDialog by remember { mutableStateOf(false) }
+    var showUnpairConfirmDialog by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
+    val dualVaultSession by FirebaseBridgeManager.currentSession.collectAsState()
+
+    val panicPhotoPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val securityDir = AppStorageHelper.getSecurityDir(context)
+                    val panicFile = File(securityDir, "panic_custom_disguise.jpg")
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        panicFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        SettingsManager.setPanicCustomImageUri(panicFile.absolutePath)
+                        Toast.makeText(context, "Custom Panic Screen image saved & set!", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Throwable) {
+                    withContext(Dispatchers.Main) {
+                        SettingsManager.setPanicCustomImageUri(uri.toString())
+                        Toast.makeText(context, "Custom Panic Screen image set!", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
 
     val bioStatus = remember { AppSecurityManager.checkBiometricStatus(context) }
 
@@ -301,7 +358,7 @@ fun SettingsScreen(
                             val (ok, msg) = AppSecurityManager.setFingerprintEnabled(context, isEnabled)
                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         },
-                        enabled = securityConfig.isPinEnabled && bioStatus == BiometricAvailability.AVAILABLE,
+                        enabled = bioStatus != BiometricAvailability.NO_HARDWARE,
                         colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier.testTag("toggle_fingerprint_unlock")
                     )
@@ -821,44 +878,509 @@ fun SettingsScreen(
                 // 🤝 DUAL USER COMBINED VAULT (Firebase Bridge)
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                    color = if (dualVaultSession.isConnected) Color(0xFF10B981).copy(alpha = 0.12f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                    border = BorderStroke(1.dp, if (dualVaultSession.isConnected) Color(0xFF10B981).copy(alpha = 0.5f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
                     modifier = Modifier.fillMaxWidth().testTag("card_dual_vault_connect")
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                Icons.Default.Group,
+                                if (dualVaultSession.isConnected) Icons.Default.FolderSpecial else Icons.Default.Group,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = if (dualVaultSession.isConnected) Color(0xFF10B981) else MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(22.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "Dual User Combined Vault",
+                                if (dualVaultSession.isConnected) "Dual User Combined Vault (PAIRED & ACTIVE)" else "Dual User Combined Vault",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.primary
+                                color = if (dualVaultSession.isConnected) Color(0xFF10B981) else MaterialTheme.colorScheme.primary
                             )
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            "Pair with another user via 10-digit code using Firebase bridge. All photos stored securely in Android/media/Dual_Vault without storing images on cloud.",
+                            if (dualVaultSession.isConnected) {
+                                val partner = if (dualVaultSession.isHost) dualVaultSession.peerName.ifBlank { "Connected Partner" } else dualVaultSession.hostName.ifBlank { "Connected Host" }
+                                "Currently connected with $partner. Vault is active and photos auto-sync to Android/media/Dual_Vault without cloud storage."
+                            } else {
+                                "Pair with another user via 10-digit code using Firebase bridge. All photos stored securely in Android/media/Dual_Vault without storing images on cloud."
+                            },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = { showDualVaultDialog = true },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.fillMaxWidth().testTag("btn_connect_other_user")
+
+                        if (dualVaultSession.isConnected) {
+                            // PAIRED STATE: Show partner profile, photo count, Open Vault and Disconnect.
+                            // NO connect again or code display.
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    DualVaultPairAvatars(
+                                        hostImage = dualVaultSession.hostProfileImage,
+                                        hostName = dualVaultSession.hostName.ifBlank { "You" },
+                                        peerImage = dualVaultSession.peerProfileImage,
+                                        peerName = dualVaultSession.peerName.ifBlank { "Partner" },
+                                        size = 38.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        val partner = if (dualVaultSession.isHost) dualVaultSession.peerName.ifBlank { "Partner" } else dualVaultSession.hostName.ifBlank { "Host" }
+                                        Text(
+                                            text = "Paired with $partner",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "${dualVaultSession.dualVaultFiles.size} photos synced • Auto-sync active",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF10B981),
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        if (onOpenDualVault != null) {
+                                            onOpenDualVault()
+                                        } else {
+                                            showDualVaultDialog = true
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.weight(1.3f).testTag("btn_open_combined_vault")
+                                ) {
+                                    Icon(Icons.Default.FolderSpecial, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Open Vault (${dualVaultSession.dualVaultFiles.size})", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { showUnpairConfirmDialog = true },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                    modifier = Modifier.weight(1f).testTag("btn_unpair_dual_vault")
+                                ) {
+                                    Icon(Icons.Default.LinkOff, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Unpair", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            // UNPAIRED STATE: Connect with other user
+                            Button(
+                                onClick = { showDualVaultDialog = true },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().testTag("btn_connect_other_user")
+                            ) {
+                                Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Connect with Other User (Host or Enter Code)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Dual Vault Paired Slideshow Time Setting (1, 2, 3, 4, 5 seconds)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Link, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Connect with Other User (Show / Enter Code)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Dual Vault Paired Slideshow Speed",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp
+                                )
+                                Text(
+                                    "Auto-advance interval: ${settings.dualVaultSlideshowIntervalSeconds} sec per slide",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(1, 2, 3, 4, 5).forEach { seconds ->
+                                val isSelected = settings.dualVaultSlideshowIntervalSeconds == seconds
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = {
+                                        SettingsManager.setDualVaultSlideshowIntervalSeconds(seconds)
+                                        Toast.makeText(context, "Dual Vault slideshow speed: ${seconds}s", Toast.LENGTH_SHORT).show()
+                                    },
+                                    label = {
+                                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                            Text(
+                                                "${seconds}s",
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("chip_dual_vault_interval_${seconds}s"),
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                    )
+                                )
+                            }
                         }
                     }
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ⚡ SHAKE TO LOCK PANIC MODE
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.fillMaxWidth().testTag("card_shake_panic_mode")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Vibration,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                "Shake to Lock Panic Mode",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "3s Disguise Screen -> Exit App",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = settings.shakeToLockEnabled,
+                        onCheckedChange = { SettingsManager.setShakeToLockEnabled(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.testTag("toggle_shake_panic_mode")
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "When enabled, continuously shaking device for the set duration shows the Panic Screen (the magical bioluminescent tree wallpaper) for 3 seconds, then securely locks and exits the app.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Shake Duration Setting (0.5 to 5.0 seconds)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "Shake Trigger Duration (0.5s - 5.0s)",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            "Continuous shake required: ${String.format(Locale.US, "%.1f", settings.shakeToLockDurationSeconds)}s (Default: 1.5s)",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Preset Chips for Duration (0.5s to 5.0s)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 5.0f).forEach { sec ->
+                        val isSelected = Math.abs(settings.shakeToLockDurationSeconds - sec) < 0.1f
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                SettingsManager.setShakeToLockDurationSeconds(sec)
+                                Toast.makeText(context, "Shake trigger set to ${sec}s", Toast.LENGTH_SHORT).show()
+                            },
+                            label = {
+                                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                    Text(
+                                        if (sec == 1.5f) "1.5s★" else "${sec}s",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            },
+                            modifier = Modifier.weight(1f).testTag("chip_panic_duration_${sec}s"),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.error,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Panic Mode Wallpaper Preview Thumbnail
+                val panicBitmap = remember(settings.panicCustomImageUri) {
+                    val pathOrUri = settings.panicCustomImageUri
+                    var bitmap: android.graphics.Bitmap? = null
+                    if (pathOrUri.isNotBlank()) {
+                        try {
+                            val file = File(pathOrUri)
+                            if (file.exists() && file.length() > 0) {
+                                bitmap = BitmapFactory.decodeFile(file.absolutePath)
+                            }
+                        } catch (_: Throwable) {}
+
+                        if (bitmap == null) {
+                            try {
+                                val uri = Uri.parse(pathOrUri)
+                                context.contentResolver.openInputStream(uri)?.use { stream ->
+                                    bitmap = BitmapFactory.decodeStream(stream)
+                                }
+                            } catch (_: Throwable) {}
+                        }
+                    }
+
+                    if (bitmap == null && pathOrUri.isNotBlank()) {
+                        try {
+                            val defaultFile = File(AppStorageHelper.getSecurityDir(context), "panic_custom_disguise.jpg")
+                            if (defaultFile.exists() && defaultFile.length() > 0) {
+                                bitmap = BitmapFactory.decodeFile(defaultFile.absolutePath)
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                    bitmap
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(115.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Color.Black),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (panicBitmap != null) {
+                        Image(
+                            bitmap = panicBitmap.asImageBitmap(),
+                            contentDescription = "Panic Screen Preview",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(topStart = 8.dp),
+                            color = Color(0xFF00E676).copy(alpha = 0.92f),
+                            modifier = Modifier.align(Alignment.BottomEnd)
+                        ) {
+                            Text(
+                                "Active: Custom Panic Wallpaper",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    } else {
+                        Image(
+                            painter = painterResource(id = R.drawable.panic_disguise_tree),
+                            contentDescription = "Default Tree Wallpaper",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(topStart = 8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f),
+                            modifier = Modifier.align(Alignment.BottomEnd)
+                        ) {
+                            Text(
+                                "Default: Bioluminescent Tree Wallpaper",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Custom Wallpaper / Default Wallpaper & Preview
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            panicPhotoPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1.2f).testTag("btn_custom_panic_image")
+                    ) {
+                        Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (settings.panicCustomImageUri.isNotBlank()) "Change Image" else "Custom Image", fontSize = 11.sp)
+                    }
+
+                    if (settings.panicCustomImageUri.isNotBlank()) {
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    try {
+                                        val securityDir = AppStorageHelper.getSecurityDir(context)
+                                        File(securityDir, "panic_custom_disguise.jpg").delete()
+                                    } catch (_: Throwable) {}
+                                    withContext(Dispatchers.Main) {
+                                        SettingsManager.setPanicCustomImageUri("")
+                                        Toast.makeText(context, "Reset to magical tree wallpaper", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.outline),
+                            modifier = Modifier.testTag("btn_reset_panic_image")
+                        ) {
+                            Text("Reset", fontSize = 11.sp)
+                        }
+                    }
+
+                    Button(
+                        onClick = { PanicModeController.triggerPanic() },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.weight(1.2f).testTag("btn_preview_panic_mode")
+                    ) {
+                        Icon(Icons.Default.Visibility, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Test Panic (3s)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 📜 ACTIVITY TIMELINE AUDIT LOG
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.fillMaxWidth().testTag("card_activity_timeline_log")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.History,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                "Activity Timeline Log",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Offline Log: media/activity/activity.json",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = { showActivityTimelineDialog = true },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("btn_view_activity_logs")
+                    ) {
+                        Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("View Logs", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    "Audits all unlocks (PIN, Biometric, Master Pass), failed attempts, locks, panic triggers, file manager accesses, and dual vault pairing/uploads completely offline in JSON format.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
@@ -1345,9 +1867,9 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Set / Change App Logo", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Launcher Icon Disguise & Custom Icon", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         Text(
-                            "Select custom branding photo or restore standard vector icon.",
+                            "Disguise app as Excel, Calculator, Notes, etc. or set custom photo icon.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1359,7 +1881,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Change", fontSize = 12.sp)
+                        Text("Disguise / Icon", fontSize = 12.sp)
                     }
                 }
 
@@ -1455,6 +1977,48 @@ fun SettingsScreen(
         if (showFileManagerDialog) {
             AppMediaFileManagerDialog(
                 onDismiss = { showFileManagerDialog = false }
+            )
+        }
+
+        if (showActivityTimelineDialog) {
+            ActivityTimelineDialog(
+                onDismiss = { showActivityTimelineDialog = false }
+            )
+        }
+
+        if (showUnpairConfirmDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showUnpairConfirmDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Unpair Dual Vault?")
+                    }
+                },
+                text = {
+                    Text("This will immediately unlink both devices and clean local Dual Vault files. Both users will need to re-pair to connect again.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showUnpairConfirmDialog = false
+                            coroutineScope.launch {
+                                FirebaseBridgeManager.disconnect(context)
+                                Toast.makeText(context, "Dual Vault unpaired and disconnected.", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.testTag("btn_confirm_unpair")
+                    ) {
+                        Text("Unpair & Clean")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showUnpairConfirmDialog = false }) {
+                        Text("Cancel")
+                    }
+                }
             )
         }
 

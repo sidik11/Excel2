@@ -41,6 +41,23 @@ object SettingsManager {
     private const val KEY_LAUNCHER_DISGUISE = "key_launcher_disguise"
     private const val KEY_LAUNCHER_CUSTOM_ICON_URI = "key_launcher_custom_icon_uri"
     private const val KEY_PANIC_CUSTOM_IMAGE = "key_panic_custom_image"
+    private const val KEY_SRA_INTERVAL = "key_sra_slideshow_interval"
+    private const val KEY_SRA_AUTO_LOOP = "key_sra_auto_loop"
+    private const val KEY_SRA_SHOW_NAME_BADGE = "key_sra_show_name_badge"
+    private const val KEY_SRA_PAUSE_ON_TAP = "key_sra_pause_on_tap"
+    private const val KEY_SRA_TRANSITION = "key_sra_transition"
+    private const val KEY_SSI_INTERVAL = "key_ssi_slideshow_interval"
+    private const val KEY_SSI_AUTO_LOOP = "key_ssi_auto_loop"
+    private const val KEY_RNAME_PREFIX = "key_rname_prefix"
+    private const val KEY_RNAME_PADDING = "key_rname_padding"
+    private const val KEY_RNAME_START_NUM = "key_rname_start_num"
+    private const val KEY_RNAME_CONFIRM = "key_rname_confirm"
+    private const val KEY_CUSTOM_ACCENT_COLOR = "key_custom_accent_color"
+    private const val KEY_GRID_DENSITY = "key_grid_density"
+    private const val KEY_UI_ANIM_SPEED = "key_ui_anim_speed"
+    private const val KEY_DEFAULT_START_TAB = "key_default_start_tab"
+    private const val KEY_HQ_RENDERING = "key_hq_rendering"
+    private const val KEY_SHOW_STORAGE_HEADER = "key_show_storage_header"
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -121,7 +138,24 @@ object SettingsManager {
             dualVaultSlideshowIntervalSeconds = dvInterval,
             launcherDisguiseName = p.getString(KEY_LAUNCHER_DISGUISE, "Excel") ?: "Excel",
             launcherCustomIconUri = p.getString(KEY_LAUNCHER_CUSTOM_ICON_URI, "") ?: "",
-            panicCustomImageUri = p.getString(KEY_PANIC_CUSTOM_IMAGE, "") ?: ""
+            panicCustomImageUri = p.getString(KEY_PANIC_CUSTOM_IMAGE, "") ?: "",
+            sraSlideshowIntervalSeconds = p.getFloat(KEY_SRA_INTERVAL, 2.0f),
+            sraAutoLoop = p.getBoolean(KEY_SRA_AUTO_LOOP, true),
+            sraShowNameBadge = p.getBoolean(KEY_SRA_SHOW_NAME_BADGE, true),
+            sraPauseOnTap = p.getBoolean(KEY_SRA_PAUSE_ON_TAP, true),
+            sraTransition = p.getString(KEY_SRA_TRANSITION, "fade") ?: "fade",
+            ssiSlideshowIntervalSeconds = p.getFloat(KEY_SSI_INTERVAL, 2.0f),
+            ssiAutoLoop = p.getBoolean(KEY_SSI_AUTO_LOOP, true),
+            rnameSequencePrefix = p.getString(KEY_RNAME_PREFIX, "VHot") ?: "VHot",
+            rnamePaddingDigits = p.getInt(KEY_RNAME_PADDING, 4),
+            rnameStartNumber = p.getInt(KEY_RNAME_START_NUM, 1),
+            rnameConfirmBeforeRename = p.getBoolean(KEY_RNAME_CONFIRM, true),
+            customAccentColor = p.getString(KEY_CUSTOM_ACCENT_COLOR, "DEFAULT") ?: "DEFAULT",
+            galleryGridDensity = p.getString(KEY_GRID_DENSITY, "STANDARD") ?: "STANDARD",
+            uiAnimationSpeed = p.getString(KEY_UI_ANIM_SPEED, "NORMAL") ?: "NORMAL",
+            defaultStartTab = p.getString(KEY_DEFAULT_START_TAB, "EXCEL") ?: "EXCEL",
+            highQualityRendering = p.getBoolean(KEY_HQ_RENDERING, true),
+            showStorageStatsHeader = p.getBoolean(KEY_SHOW_STORAGE_HEADER, true)
         )
     }
 
@@ -273,5 +307,94 @@ object SettingsManager {
     fun setPanicCustomImageUri(uri: String) {
         prefs?.edit()?.putString(KEY_PANIC_CUSTOM_IMAGE, uri)?.apply()
         _settings.value = _settings.value.copy(panicCustomImageUri = uri)
+    }
+
+    // SRA Settings
+    fun setSraSlideshowIntervalSeconds(seconds: Float) {
+        prefs?.edit()?.putFloat(KEY_SRA_INTERVAL, seconds)?.apply()
+        _settings.value = _settings.value.copy(sraSlideshowIntervalSeconds = seconds)
+    }
+
+    fun setSraAutoLoop(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_SRA_AUTO_LOOP, enabled)?.apply()
+        _settings.value = _settings.value.copy(sraAutoLoop = enabled)
+    }
+
+    fun setSraShowNameBadge(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_SRA_SHOW_NAME_BADGE, enabled)?.apply()
+        _settings.value = _settings.value.copy(sraShowNameBadge = enabled)
+    }
+
+    fun setSraPauseOnTap(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_SRA_PAUSE_ON_TAP, enabled)?.apply()
+        _settings.value = _settings.value.copy(sraPauseOnTap = enabled)
+    }
+
+    fun setSraTransition(transition: String) {
+        prefs?.edit()?.putString(KEY_SRA_TRANSITION, transition)?.apply()
+        _settings.value = _settings.value.copy(sraTransition = transition)
+    }
+
+    // SSI Settings
+    fun setSsiSlideshowIntervalSeconds(seconds: Float) {
+        prefs?.edit()?.putFloat(KEY_SSI_INTERVAL, seconds)?.apply()
+        _settings.value = _settings.value.copy(ssiSlideshowIntervalSeconds = seconds)
+    }
+
+    fun setSsiAutoLoop(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_SSI_AUTO_LOOP, enabled)?.apply()
+        _settings.value = _settings.value.copy(ssiAutoLoop = enabled)
+    }
+
+    // Rname Settings
+    fun setRnameSequencePrefix(prefix: String) {
+        prefs?.edit()?.putString(KEY_RNAME_PREFIX, prefix)?.apply()
+        _settings.value = _settings.value.copy(rnameSequencePrefix = prefix)
+    }
+
+    fun setRnamePaddingDigits(digits: Int) {
+        prefs?.edit()?.putInt(KEY_RNAME_PADDING, digits)?.apply()
+        _settings.value = _settings.value.copy(rnamePaddingDigits = digits)
+    }
+
+    fun setRnameStartNumber(startNum: Int) {
+        prefs?.edit()?.putInt(KEY_RNAME_START_NUM, startNum)?.apply()
+        _settings.value = _settings.value.copy(rnameStartNumber = startNum)
+    }
+
+    fun setRnameConfirmBeforeRename(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_RNAME_CONFIRM, enabled)?.apply()
+        _settings.value = _settings.value.copy(rnameConfirmBeforeRename = enabled)
+    }
+
+    // Customization Settings
+    fun setCustomAccentColor(accent: String) {
+        prefs?.edit()?.putString(KEY_CUSTOM_ACCENT_COLOR, accent)?.apply()
+        _settings.value = _settings.value.copy(customAccentColor = accent)
+    }
+
+    fun setGalleryGridDensity(density: String) {
+        prefs?.edit()?.putString(KEY_GRID_DENSITY, density)?.apply()
+        _settings.value = _settings.value.copy(galleryGridDensity = density)
+    }
+
+    fun setUiAnimationSpeed(speed: String) {
+        prefs?.edit()?.putString(KEY_UI_ANIM_SPEED, speed)?.apply()
+        _settings.value = _settings.value.copy(uiAnimationSpeed = speed)
+    }
+
+    fun setDefaultStartTab(tab: String) {
+        prefs?.edit()?.putString(KEY_DEFAULT_START_TAB, tab)?.apply()
+        _settings.value = _settings.value.copy(defaultStartTab = tab)
+    }
+
+    fun setHighQualityRendering(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_HQ_RENDERING, enabled)?.apply()
+        _settings.value = _settings.value.copy(highQualityRendering = enabled)
+    }
+
+    fun setShowStorageStatsHeader(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_SHOW_STORAGE_HEADER, enabled)?.apply()
+        _settings.value = _settings.value.copy(showStorageStatsHeader = enabled)
     }
 }

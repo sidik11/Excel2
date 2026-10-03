@@ -40,5 +40,26 @@ data class AppSettings(
     val panicCustomImageUri: String = "",
     val dualVaultSlideshowIntervalSeconds: Int = 3, // 1, 2, 3, 4, 5 seconds
     val launcherDisguiseName: String = "Excel", // "Excel", "Calculator", "Notes", "Weather", "Clock", "Custom"
-    val launcherCustomIconUri: String = ""
+    val launcherCustomIconUri: String = "",
+    // SRA (Slideshow Rearrange) Settings
+    val sraSlideshowIntervalSeconds: Float = 2.0f, // 1.0s to 5.0s
+    val sraAutoLoop: Boolean = true,
+    val sraShowNameBadge: Boolean = true,
+    val sraPauseOnTap: Boolean = true,
+    val sraTransition: String = "fade", // "fade", "slide", "instant"
+    // SSI (Saved Slideshow Images) Settings
+    val ssiSlideshowIntervalSeconds: Float = 2.0f, // 1.0s to 5.0s
+    val ssiAutoLoop: Boolean = true,
+    // Rname (VHot Renamer) Settings
+    val rnameSequencePrefix: String = "VHot",
+    val rnamePaddingDigits: Int = 4, // 0001
+    val rnameStartNumber: Int = 1,
+    val rnameConfirmBeforeRename: Boolean = true,
+    // App Customization Settings
+    val customAccentColor: String = "DEFAULT", // "DEFAULT", "INDIGO", "EMERALD", "SKY", "ROSE", "AMBER", "CYAN", "VIOLET"
+    val galleryGridDensity: String = "STANDARD", // "COMPACT", "STANDARD", "COZY"
+    val uiAnimationSpeed: String = "NORMAL", // "FAST", "NORMAL", "RELAXED", "OFF"
+    val defaultStartTab: String = "EXCEL", // "EXCEL", "VAULT", "SSHOW", "DUAL_VAULT", "SRA", "RNAME", "SETTINGS"
+    val highQualityRendering: Boolean = true,
+    val showStorageStatsHeader: Boolean = true
 )

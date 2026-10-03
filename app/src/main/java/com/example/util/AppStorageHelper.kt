@@ -130,6 +130,16 @@ object AppStorageHelper {
     }
 
     /**
+     * Dedicated folder for SSI (Saved Slideshow Images) in Android/media/<packageName>/media_imported.
+     * All images imported from Excel full screen viewer are persisted here.
+     */
+    fun getMediaImportedDir(context: Context): File {
+        val dir = File(getDedicatedMediaDir(context), "media_imported")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    /**
      * Dedicated folder for Dual Combined Vault storage in Android/media/<packageName>/Dual_Vault.
      */
     fun getDualVaultDir(context: Context): File {

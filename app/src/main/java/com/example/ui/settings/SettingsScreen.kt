@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.ColorLens
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Folder
@@ -44,6 +43,7 @@ import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Group
@@ -95,6 +95,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -103,8 +104,8 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.AppTheme
+import com.example.ui.theme.AccentGreen
 import com.example.ui.security.ChangeMasterPasswordDialog
-import com.example.ui.security.FaceLockSetupDialog
 import com.example.ui.security.PinManagementDialog
 import com.example.ui.security.SecurityFolderInspectorDialog
 import com.example.ui.profile.ProfileDialog
@@ -144,7 +145,6 @@ fun SettingsScreen(
     var showShareQrDialog by remember { mutableStateOf(false) }
     var showDualVaultDialog by remember { mutableStateOf(false) }
     var showFileManagerDialog by remember { mutableStateOf(false) }
-    var showFaceSetupDialog by remember { mutableStateOf(false) }
     var showActivityTimelineDialog by remember { mutableStateOf(false) }
     var showUnpairConfirmDialog by remember { mutableStateOf(false) }
 
@@ -551,102 +551,6 @@ fun SettingsScreen(
                         colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier.testTag("toggle_anti_screenshot")
                     )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
-
-                // Face Recognition Lock (Real Camera & Biometric Verification)
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Face, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Real Face Recognition Lock", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = if (securityConfig.isFaceEnrolled) Color(0xFF10B981).copy(alpha = 0.15f) else Color(0xFFF59E0B).copy(alpha = 0.15f)
-                                ) {
-                                    Text(
-                                        text = if (securityConfig.isFaceEnrolled) "ENROLLED" else "SETUP REQUIRED",
-                                        color = if (securityConfig.isFaceEnrolled) Color(0xFF10B981) else Color(0xFFF59E0B),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                            Text(
-                                if (securityConfig.isFaceEnrolled) {
-                                    val dateStr = if (securityConfig.faceEnrolledAt > 0) {
-                                        SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(securityConfig.faceEnrolledAt))
-                                    } else "Active"
-                                    "Face calibrated ($dateStr) • Front camera verification on startup."
-                                } else {
-                                    "Must complete face calibration setup first before enabling."
-                                },
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = securityConfig.isFaceLockEnabled && securityConfig.isFaceEnrolled,
-                            onCheckedChange = { isEnabled ->
-                                if (isEnabled && !securityConfig.isFaceEnrolled) {
-                                    Toast.makeText(context, "Please set up your face recognition first.", Toast.LENGTH_LONG).show()
-                                    showFaceSetupDialog = true
-                                } else {
-                                    AppSecurityManager.setFaceLockEnabled(context, isEnabled)
-                                    val status = if (isEnabled) "Face lock enabled." else "Face lock disabled."
-                                    Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
-                            modifier = Modifier.testTag("toggle_face_lock")
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { showFaceSetupDialog = true },
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.weight(1f).testTag("btn_setup_face_lock")
-                        ) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                if (securityConfig.isFaceEnrolled) "Re-Enroll Face" else "Set Up Face Lock",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        if (securityConfig.isFaceEnrolled) {
-                            OutlinedButton(
-                                onClick = {
-                                    AppSecurityManager.removeEnrolledFace(context)
-                                    Toast.makeText(context, "Face registration removed.", Toast.LENGTH_SHORT).show()
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                modifier = Modifier.testTag("btn_remove_face_lock")
-                            ) {
-                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Remove", fontSize = 12.sp)
-                            }
-                        }
-                    }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
@@ -1779,6 +1683,464 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(18.dp))
 
+        // SECTION: 🎬 SRA (Slideshow Rearrange) Settings
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.fillMaxWidth().testTag("section_sra_settings")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Speed, contentDescription = null, tint = Color(0xFF6C5CE7))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("🎬 SRA (Slideshow Rearrange) Settings", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Configure slide timings, shuffle behavior, and fullscreen playback controls:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Slideshow Interval (1.0 sec to 5.0 sec)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Slideshow Time Interval", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Surface(
+                            color = Color(0xFF6C5CE7).copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                String.format(Locale.US, "%.1f sec", settings.sraSlideshowIntervalSeconds),
+                                color = Color(0xFF6C5CE7),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Text("Time each image is displayed before advancing in SRA slideshow (1.0s – 5.0s)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Slider(
+                        value = settings.sraSlideshowIntervalSeconds.coerceIn(1.0f, 5.0f),
+                        onValueChange = { SettingsManager.setSraSlideshowIntervalSeconds(it) },
+                        valueRange = 1.0f..5.0f,
+                        steps = 7, // 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0
+                        modifier = Modifier.testTag("slider_sra_interval")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // SRA Auto Loop
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Continuous Auto-Loop", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Automatically restart slideshow from the beginning when reaching the last image.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = settings.sraAutoLoop,
+                        onCheckedChange = { SettingsManager.setSraAutoLoop(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.testTag("toggle_sra_loop")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Show Name Badges on Thumbnails
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Show Filename Badge on Thumbnails", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Display file name label overlay at the bottom of each gallery card.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = settings.sraShowNameBadge,
+                        onCheckedChange = { SettingsManager.setSraShowNameBadge(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.testTag("toggle_sra_name_badge")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Tap to Pause on Fullscreen Modal
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Tap to Pause / Resume in Fullscreen", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Tapping the active image in fullscreen modal toggles play and pause.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = settings.sraPauseOnTap,
+                        onCheckedChange = { SettingsManager.setSraPauseOnTap(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.testTag("toggle_sra_pause_tap")
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // SECTION: 📸 SSI (Imported Slideshow) Settings
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.fillMaxWidth().testTag("section_ssi_settings")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Slideshow, contentDescription = null, tint = AccentGreen)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("📸 SSI (Imported Slideshow) Settings", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Configure slideshow intervals and auto-loop for images imported into media_imported:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Slideshow Interval (1.0 sec to 5.0 sec)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("SSI Slideshow Time Interval", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Surface(
+                            color = AccentGreen.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                String.format(Locale.US, "%.1f sec", settings.ssiSlideshowIntervalSeconds),
+                                color = AccentGreen,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Text("Time each imported image is shown before advancing in SSI slideshow (1.0s – 5.0s)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Slider(
+                        value = settings.ssiSlideshowIntervalSeconds.coerceIn(1.0f, 5.0f),
+                        onValueChange = { SettingsManager.setSsiSlideshowIntervalSeconds(it) },
+                        valueRange = 1.0f..5.0f,
+                        steps = 7, // 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0
+                        modifier = Modifier.testTag("slider_ssi_interval")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Auto-Loop Slideshow
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Auto-Loop Slideshow", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Automatically loop back to the first imported image when reaching the end.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = settings.ssiAutoLoop,
+                        onCheckedChange = { SettingsManager.setSsiAutoLoop(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.testTag("toggle_ssi_loop")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Media Directory Info
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Import Directory", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Images saved from Excel viewer are stored directly in Android/media/<packageName>/media_imported", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // SECTION: 🏷️ Rname (VHot Renamer) Settings
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.fillMaxWidth().testTag("section_rname_settings")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Pin, contentDescription = null, tint = Color(0xFF00B894))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("🏷️ Rname (VHot Renamer) Settings", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Configure sequence prefix, digit padding, and confirmation safeguard:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Sequence Prefix
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Sequence Prefix Name", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text("Default prefix used for continued numbering (e.g. VHot -> VHot0001.jpg):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = settings.rnameSequencePrefix,
+                        onValueChange = { SettingsManager.setRnameSequencePrefix(it) },
+                        singleLine = true,
+                        placeholder = { Text("e.g. VHot") },
+                        modifier = Modifier.fillMaxWidth().testTag("input_rname_prefix")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Digit Padding
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Padding Digits", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("${settings.rnamePaddingDigits} digits (e.g. ${settings.rnameSequencePrefix}${"1".padStart(settings.rnamePaddingDigits, '0')})", fontSize = 12.sp, color = Color(0xFF00B894), fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(2, 3, 4, 5, 6).forEach { digits ->
+                            val isSel = settings.rnamePaddingDigits == digits
+                            FilterChip(
+                                selected = isSel,
+                                onClick = { SettingsManager.setRnamePaddingDigits(digits) },
+                                label = { Text("$digits digits") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF00B894),
+                                    selectedLabelColor = Color.White
+                                ),
+                                modifier = Modifier.weight(1f).testTag("chip_padding_$digits")
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Confirm Before Bulk Rename
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Confirm Before Renaming Files", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Shows an alert dialog with the exact count and target names before modifying files.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = settings.rnameConfirmBeforeRename,
+                        onCheckedChange = { SettingsManager.setRnameConfirmBeforeRename(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.testTag("toggle_rname_confirm")
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // SECTION: 🎨 Vast App Customization & Preferences
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            modifier = Modifier.fillMaxWidth().testTag("section_vast_customization")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Palette, contentDescription = null, tint = Color(0xFFFD79A8))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("🎨 App Customization & Display", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Personalize UI layout density, default tabs, rendering fidelity, and accent colors:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Accent Palette Chooser
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Theme Accent Highlight", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text("Choose highlight accent color across tabs, buttons, and badges:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            Triple("DEFAULT", "Default", MaterialTheme.colorScheme.primary),
+                            Triple("CYBER_GREEN", "Green", Color(0xFF00FF41)),
+                            Triple("CYAN", "Cyan", Color(0xFF00CEC9)),
+                            Triple("PURPLE", "Purple", Color(0xFF6C5CE7)),
+                            Triple("AMBER", "Gold", Color(0xFFFDCB6E)),
+                            Triple("CORAL", "Coral", Color(0xFFFF7675))
+                        ).forEach { (code, name, col) ->
+                            val isSel = settings.customAccentColor == code
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSel) col else MaterialTheme.colorScheme.surfaceVariant,
+                                border = if (isSel) BorderStroke(2.dp, Color.White) else null,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { SettingsManager.setCustomAccentColor(code) }
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 8.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(col)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = name,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSel) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Grid Density
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Gallery Grid Columns Density", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text("Number of image thumbnail columns in galleries:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            "COZY" to "2 Columns (Large)",
+                            "STANDARD" to "3 Columns (Balanced)",
+                            "COMPACT" to "4 Columns (Compact)"
+                        ).forEach { (density, label) ->
+                            FilterChip(
+                                selected = settings.galleryGridDensity == density,
+                                onClick = { SettingsManager.setGalleryGridDensity(density) },
+                                label = { Text(label, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = Color.White
+                                ),
+                                modifier = Modifier.weight(1f).testTag("chip_density_$density")
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // UI Animation Speed
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Interface Animation Speed", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text("Controls transitions and modal opening speeds:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            "FAST" to "Fast (0.5x)",
+                            "NORMAL" to "Normal (1.0x)",
+                            "RELAXED" to "Relaxed (1.5x)"
+                        ).forEach { (speed, label) ->
+                            FilterChip(
+                                selected = settings.uiAnimationSpeed == speed,
+                                onClick = { SettingsManager.setUiAnimationSpeed(speed) },
+                                label = { Text(label, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = Color.White
+                                ),
+                                modifier = Modifier.weight(1f).testTag("chip_anim_$speed")
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // High Quality Rendering
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("High-Quality Fullscreen Rendering", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Renders photos at max hardware resolution without downsampling.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = settings.highQualityRendering,
+                        onCheckedChange = { SettingsManager.setHighQualityRendering(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.testTag("toggle_hq_rendering")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Show Storage Stats Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Storage Stats Header Bar", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Shows top status banner with memory and disk persistence metrics.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = settings.showStorageStatsHeader,
+                        onCheckedChange = { SettingsManager.setShowStorageStatsHeader(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.testTag("toggle_storage_header")
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
         // SECTION 6: 📖 User Manual & PDF Documentation
         Surface(
             color = MaterialTheme.colorScheme.surface,
@@ -2018,16 +2380,6 @@ fun SettingsScreen(
                     TextButton(onClick = { showUnpairConfirmDialog = false }) {
                         Text("Cancel")
                     }
-                }
-            )
-        }
-
-        if (showFaceSetupDialog) {
-            FaceLockSetupDialog(
-                onDismiss = { showFaceSetupDialog = false },
-                onEnrolled = {
-                    showFaceSetupDialog = false
-                    Toast.makeText(context, "Face recognition calibrated and enabled!", Toast.LENGTH_SHORT).show()
                 }
             )
         }

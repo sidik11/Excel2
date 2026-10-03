@@ -3,16 +3,20 @@ package com.example.ui.components
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -22,9 +26,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -35,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,13 +74,15 @@ fun ModalImageViewer(
     onClose: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
-    onToggleSlideshow: () -> Unit
+    onToggleSlideshow: () -> Unit,
+    onImportToSsi: (DisplayImageItem) -> Unit = {}
 ) {
     if (images.isEmpty() || currentIndex !in images.indices) return
 
     val currentItem = images[currentIndex]
     val context = LocalContext.current
     var totalDrag by remember { mutableFloatStateOf(0f) }
+    var importedCurrent by remember(currentIndex) { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onClose,
@@ -262,31 +273,68 @@ fun ModalImageViewer(
                 )
             }
 
-            // Bottom Counter Badge
-            Surface(
-                color = Color.Black.copy(alpha = 0.65f),
-                shape = CircleShape,
+            // Bottom Area: Counter Badge + Import to SSI Button
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
                     .padding(bottom = 24.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                // Bottom Counter Badge
+                Surface(
+                    color = Color.Black.copy(alpha = 0.7f),
+                    shape = CircleShape,
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
                 ) {
-                    if (isSlideshowActive) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(AccentGreen, CircleShape)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        if (isSlideshowActive) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(AccentGreen, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = "${currentIndex + 1} / ${images.size}",
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
                     }
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                // Import to SSI Button
+                Button(
+                    onClick = {
+                        importedCurrent = true
+                        onImportToSsi(currentItem)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (importedCurrent) AccentGreen else Color(0xFF6C5CE7),
+                        contentColor = if (importedCurrent) Color.Black else Color.White
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp),
+                    modifier = Modifier.testTag("import_to_ssi_button")
+                ) {
+                    Icon(
+                        imageVector = if (importedCurrent) Icons.Default.Check else Icons.Default.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "${currentIndex + 1} / ${images.size}",
-                        color = Color.White,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium
+                        text = if (importedCurrent) "Imported to SSI" else "Import to SSI",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }

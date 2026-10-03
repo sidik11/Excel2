@@ -282,7 +282,42 @@ object SecureCryptoHelper {
     }
 
     /**
+     * Copy a file to the system Downloads folder so the user has the latest updated file.
+     */
+    fun exportToPublicDownloads(context: Context, sourceFile: File, displayName: String): Uri? {
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/octet-stream")
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uri = context.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                if (uri != null) {
+                    context.contentResolver.openOutputStream(uri)?.use { os ->
+                        FileInputStream(sourceFile).use { fis -> fis.copyTo(os) }
+                    }
+                }
+                uri
+            } else {
+                @Suppress("DEPRECATION")
+                val dlDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                if (!dlDir.exists()) dlDir.mkdirs()
+                val target = File(dlDir, displayName)
+                FileInputStream(sourceFile).use { fis ->
+                    FileOutputStream(target).use { fos -> fis.copyTo(fos) }
+                }
+                Uri.fromFile(target)
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
      * Add images to an existing .secure file.
+     * Safely isolates incoming images from session directory cleanup,
+     * re-encrypts the full combined set, and updates the source SAF URI if writable.
      */
     suspend fun addImagesToExistingSecure(
         context: Context,
@@ -291,13 +326,73 @@ object SecureCryptoHelper {
         pin: String,
         onProgress: (Float, String) -> Unit = { _, _ -> }
     ): File = withContext(Dispatchers.IO) {
-        onProgress(0.15f, "Reading current images…")
-        val currentImages = decryptSecureFile(context, secureUri, pin, onProgress)
-        val combined = (currentImages.map { it.file } + newImages).distinctBy { it.name }
+        onProgress(0.1f, "Staging incoming images safely…")
+        // 1. Isolate new images so decrypt's directory wipe can NEVER touch them
+        val isolatedDir = File(context.cacheDir, "sshow_add_isolated_${UUID.randomUUID()}").apply { mkdirs() }
+        val preservedNewFiles = mutableListOf<File>()
+        val buf = ByteArray(32 * 1024)
 
-        onProgress(0.5f, "Re-encrypting container…")
+        for ((idx, srcFile) in newImages.withIndex()) {
+            if (srcFile.exists() && srcFile.length() > 0) {
+                val targetName = "add_${System.currentTimeMillis()}_${idx}_${srcFile.name}"
+                val targetFile = File(isolatedDir, targetName)
+                FileInputStream(srcFile).use { fis ->
+                    FileOutputStream(targetFile).use { fos ->
+                        var r: Int
+                        while (fis.read(buf).also { r = it } != -1) {
+                            fos.write(buf, 0, r)
+                        }
+                    }
+                }
+                preservedNewFiles.add(targetFile)
+            }
+        }
+
+        onProgress(0.25f, "Decrypting existing container…")
+        val currentImages = decryptSecureFile(context, secureUri, pin, onProgress)
+
+        // 2. Copy preserved new images into active extractDir so user can preview all immediately
+        val extractDir = getSShowExtractDir(context)
+        val finalFiles = mutableListOf<File>()
+        finalFiles.addAll(currentImages.map { it.file })
+
+        for (newFile in preservedNewFiles) {
+            val inExtract = File(extractDir, newFile.name)
+            FileInputStream(newFile).use { fis ->
+                FileOutputStream(inExtract).use { fos ->
+                    var r: Int
+                    while (fis.read(buf).also { r = it } != -1) {
+                        fos.write(buf, 0, r)
+                    }
+                }
+            }
+            finalFiles.add(inExtract)
+        }
+
+        onProgress(0.5f, "Re-encrypting all ${finalFiles.size} images…")
         val baseName = secureUri.lastPathSegment?.substringAfterLast("/")?.substringBeforeLast(".secure")?.substringBeforeLast("-") ?: "UpdatedSecure"
-        val (_, outFile) = encryptImagesToSecureFile(context, combined, baseName, pin, onProgress)
+        val (_, outFile) = encryptImagesToSecureFile(context, finalFiles, baseName, pin, onProgress)
+
+        // 3. Write back directly to the original SAF Document URI if it has write permissions
+        try {
+            context.contentResolver.openOutputStream(secureUri, "wt")?.use { os ->
+                FileInputStream(outFile).use { fis ->
+                    fis.copyTo(os)
+                }
+            }
+        } catch (_: Throwable) {
+            // If SAF URI is read-only, outFile in SShowSecureDir is ready
+        }
+
+        // 4. Also copy the updated file to the device Downloads folder for instant access
+        exportToPublicDownloads(context, outFile, outFile.name)
+
+        // 5. Clean up staging folder
+        try {
+            isolatedDir.deleteRecursively()
+        } catch (_: Throwable) {}
+
+        onProgress(1.0f, "Updated container created with ${finalFiles.size} images!")
         outFile
     }
 

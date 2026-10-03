@@ -210,9 +210,19 @@ class SShowViewModel(application: Application) : AndroidViewModel(application) {
                         _uiState.value = _uiState.value.copy(loadingProgress = progress, loadingMessage = msg)
                     }
                 )
+                // Load updated images so the user sees all images immediately
+                val updatedImages = try {
+                    SecureCryptoHelper.decryptSecureFile(getApplication(), Uri.fromFile(updatedFile), pin)
+                } catch (_: Throwable) {
+                    emptyList()
+                }
+
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    statusMessage = "✅ Added ${imageUris.size} images to ${updatedFile.name}!"
+                    lastGeneratedPin = pin,
+                    lastGeneratedFileName = updatedFile.name,
+                    images = if (updatedImages.isNotEmpty()) updatedImages else _uiState.value.images,
+                    statusMessage = "✅ Added ${imageUris.size} images to ${updatedFile.name} (Total: ${if (updatedImages.isNotEmpty()) updatedImages.size else "updated"})!\nPassword: $pin (Saved in Downloads & SShow_Secure)"
                 )
             } catch (t: Throwable) {
                 _uiState.value = _uiState.value.copy(
@@ -434,7 +444,7 @@ class SShowViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun copyUrisToTempFiles(uris: List<Uri>): List<File> {
         val context = getApplication<Application>()
-        val tempDir = com.example.util.AppStorageHelper.getSShowWorkDir(context)
+        val tempDir = File(context.cacheDir, "sshow_upload_staging").apply { mkdirs() }
         val files = mutableListOf<File>()
         val buf = ByteArray(32 * 1024)
         for ((idx, uri) in uris.withIndex()) {

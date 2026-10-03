@@ -13,6 +13,7 @@ import com.example.util.ExcelParser
 import com.example.util.NotificationHelper
 import com.example.util.ParsedExcelRow
 import com.example.util.StorageHelper
+import com.example.util.SsiManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -378,6 +379,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             notificationId = NotificationHelper.NOTIFICATION_TEST
         )
         _uiState.update { it.copy(userMessage = "Test push notification dispatched!") }
+    }
+
+    fun importImageToSsi(item: DisplayImageItem) {
+        viewModelScope.launch {
+            val result = SsiManager.importImage(
+                context = getApplication(),
+                sourceUriString = item.fileUri,
+                preferredFileName = item.fileName.ifEmpty { "${item.code}.jpg" },
+                code = item.code,
+                name = item.name,
+                colour = item.colour
+            )
+            if (result.isSuccess) {
+                _uiState.update {
+                    it.copy(userMessage = "✓ Imported ${item.fileName.ifEmpty { item.code }} to SSI (media_imported)")
+                }
+            } else {
+                _uiState.update {
+                    it.copy(userMessage = "Failed to import to SSI: ${result.exceptionOrNull()?.message}")
+                }
+            }
+        }
     }
 
     fun clearUserMessage() {

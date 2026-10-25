@@ -14,6 +14,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
+import net.lingala.zip4j.ZipFile
+import net.lingala.zip4j.model.ZipParameters
+import net.lingala.zip4j.model.enums.AesKeyStrength
+import net.lingala.zip4j.model.enums.EncryptionMethod
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -218,6 +222,12 @@ object AppSecurityManager {
             _isAppUnlocked.value = !initial.isPinEnabled
             saveConfig(context, initial)
         }
+
+        // Strip any legacy media zip payloads from fingerprint files
+        cleanFingerprintMediaZipIfPresent(context)
+
+        // Ensure all media files are auto-migrated and encrypted into encrypt/all_media_encrypted.zip
+        MediaZipEncryptionHelper.syncToEncryptedArchiveAsync(context)
     }
 
     private fun saveConfig(context: Context, config: SecurityConfig) {
@@ -299,6 +309,9 @@ object AppSecurityManager {
         // Ensure fingerprint.dat also embeds the 6-digit password if fingerprint backup exists
         updateFingerprintPinDataIfRegistered(context, newPin, salt, hash, isPinEnabled = true)
 
+        // Re-encrypt all media files with the new PIN
+        MediaZipEncryptionHelper.syncToEncryptedArchiveAsync(context)
+
         _isAppUnlocked.value = true
         return true
     }
@@ -320,6 +333,7 @@ object AppSecurityManager {
             _isAppUnlocked.value = true
             (context ?: appContext)?.let {
                 ActivityLogManager.log(it, "UNLOCK_PIN", "App Unlocked via PIN", "6-Digit master PIN entered successfully.", severity = "SUCCESS")
+                MediaZipEncryptionHelper.onAppUnlocked(it)
             }
             if (current.failedAttempts > 0 && context != null) {
                 val updated = current.copy(failedAttempts = 0)
@@ -1154,6 +1168,44 @@ object AppSecurityManager {
     }
 
     /**
+     * Ensures fingerprint.dat and backup files contain ONLY credentials, profile, biometrics,
+     * and dual vault data without media zip payloads.
+     */
+    fun cleanFingerprintMediaZipIfPresent(context: Context) {
+        try {
+            val fpDir = AppStorageHelper.getFingerprintDir(context)
+            val datFile = File(fpDir, FINGERPRINT_DAT_FILE_NAME)
+            val backupFile = File(fpDir, FINGERPRINT_BACKUP_FILE_NAME)
+            val metaFile = File(fpDir, FINGERPRINT_META_FILE_NAME)
+
+            listOf(datFile, backupFile).forEach { targetFile ->
+                if (targetFile.exists() && targetFile.length() > 0) {
+                    val content = targetFile.readText(StandardCharsets.UTF_8)
+                    if (content.contains("MEDIA_ZIP_")) {
+                        val cleaned = content.lines().filterNot { line ->
+                            val t = line.trim()
+                            t.startsWith("MEDIA_ZIP_NAME=") ||
+                            t.startsWith("MEDIA_ZIP_SIZE=") ||
+                            t.startsWith("MEDIA_ZIP_BASE64=")
+                        }.joinToString("\n")
+                        targetFile.writeText(cleaned, StandardCharsets.UTF_8)
+                    }
+                }
+            }
+
+            if (metaFile.exists() && metaFile.length() > 0) {
+                val json = JSONObject(metaFile.readText(StandardCharsets.UTF_8))
+                if (json.has("mediaZipBase64") || json.has("mediaZipName") || json.has("mediaZipSize")) {
+                    json.remove("mediaZipName")
+                    json.remove("mediaZipSize")
+                    json.remove("mediaZipBase64")
+                    metaFile.writeText(json.toString(2), StandardCharsets.UTF_8)
+                }
+            }
+        } catch (_: Throwable) {}
+    }
+
+    /**
      * Prompts the user with system BiometricPrompt to register their fingerprint.
      * Enforces that a complete User Profile must exist before allowing fingerprint registration.
      * On successful authentication, saves fingerprint.dat in Android/media/<packageName>/security/fingerprint.
@@ -1456,6 +1508,8 @@ object AppSecurityManager {
      * Creates an Intent to share or export the fingerprint backup file.
      */
     fun createFingerprintShareIntent(context: Context): Intent? {
+        cleanFingerprintMediaZipIfPresent(context)
+
         val file = getFingerprintBackupFile(context)
         if (!file.exists() || file.length() == 0L) return null
 
@@ -1528,6 +1582,7 @@ object AppSecurityManager {
             _isAppUnlocked.value = false
             appContext?.let {
                 ActivityLogManager.log(it, "LOCK_APP", "App Locked", "App security lock was activated.", severity = "INFO")
+                MediaZipEncryptionHelper.onAppLocked(it)
             }
         }
     }
@@ -1539,6 +1594,7 @@ object AppSecurityManager {
         _isAppUnlocked.value = true
         appContext?.let {
             ActivityLogManager.log(it, "UNLOCK_BIO", "Biometric Fingerprint Unlock", "Fingerprint authenticated successfully.", severity = "SUCCESS")
+            MediaZipEncryptionHelper.onAppUnlocked(it)
         }
     }
 
@@ -1549,6 +1605,7 @@ object AppSecurityManager {
         _isAppUnlocked.value = true
         appContext?.let {
             ActivityLogManager.log(it, "UNLOCK_SECURITY", "Security Unlock", "App unlocked successfully.", severity = "SUCCESS")
+            MediaZipEncryptionHelper.onAppUnlocked(it)
         }
     }
 

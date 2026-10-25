@@ -75,6 +75,7 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.example.util.AppSecurityManager
 import com.example.util.BiometricAvailability
+import com.example.util.MediaZipEncryptionHelper
 import com.example.util.ProfileManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

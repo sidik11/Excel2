@@ -62,9 +62,9 @@ class MainActivity : FragmentActivity() {
                 val settings by SettingsManager.settings.collectAsState()
                 val isPanicActive by PanicModeController.isPanicActive.collectAsState()
 
-                // Apply Anti-Screenshot and Recent App Privacy protection (masks Recent Apps switcher)
-                LaunchedEffect(securityConfig.isAntiScreenshotEnabled, settings.recentAppPrivacy) {
-                    if (securityConfig.isAntiScreenshotEnabled || settings.recentAppPrivacy) {
+                // Apply Anti-Screenshot protection (controls window FLAG_SECURE)
+                LaunchedEffect(securityConfig.isAntiScreenshotEnabled) {
+                    if (securityConfig.isAntiScreenshotEnabled) {
                         window.setFlags(
                             WindowManager.LayoutParams.FLAG_SECURE,
                             WindowManager.LayoutParams.FLAG_SECURE

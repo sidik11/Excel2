@@ -1,20 +1,25 @@
 package com.example.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,49 +33,73 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileMove
+import androidx.compose.material.icons.filled.DriveFolderUpload
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -85,7 +114,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -97,13 +126,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.ui.components.VaultModalViewer
+import com.example.util.ImgVaultEngine
 import com.example.util.VaultImage
+import com.example.util.VaultSortMode
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-private val VaultBg = Color(0xFF0A0E1A)
+private val VaultNavyBg = Color(0xFF0A0E1A)
 private val VaultCardBg = Color(0xFF131A2B)
-private val VaultBorder = Color(0x2A6C5CE7)
+private val VaultBorder = Color(0x336C5CE7)
 private val VaultAccent = Color(0xFF6C5CE7)
-private val VaultAccent2 = Color(0xFFA29BFE)
 private val VaultCyan = Color(0xFF00CEC9)
 private val VaultDanger = Color(0xFFFF6B6B)
 private val VaultSuccess = Color(0xFF00B894)
@@ -116,1301 +150,1654 @@ fun VaultScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // Folder picker for Create
-    val createFolderPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) viewModel.onCreateFolderSelected(uri)
+    var showAddImagesChoiceDialog by remember { mutableStateOf(false) }
+
+    // Batch media picker (Storage Access Framework: up to 500 images at once without 100 limit)
+    val batchImagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            val toImport = if (uris.size > 500) {
+                Toast.makeText(context, "Selecting first 500 images (batch limit is 500)", Toast.LENGTH_LONG).show()
+                uris.take(500)
+            } else {
+                uris
+            }
+            viewModel.importImages(toImport)
+        }
     }
 
-    // Folder picker for Access
-    val accessFolderPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { uri ->
-        if (uri != null) viewModel.onAccessFolderSelected(uri)
-    }
-
-    // Direct .dat file picker
-    val datFilePicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri ->
-        if (uri != null) viewModel.onDirectDatFilePicked(uri)
-    }
-
-    // Photo picker for adding images
-    val photoPicker = rememberLauncherForActivityResult(
+    // Standard Photo Grid Picker (system capped at 100 photos)
+    val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia()
     ) { uris ->
-        if (uris.isNotEmpty()) viewModel.addImages(uris)
-    }
-
-    // Auto-detect and sync changes when returning to the app from the phone's File Manager
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                viewModel.syncFromExVault()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
+        if (uris.isNotEmpty()) {
+            val toImport = if (uris.size > 500) uris.take(500) else uris
+            viewModel.importImages(toImport)
         }
     }
 
-    Column(
+    // SAF Folder picker for location
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        if (treeUri != null) {
+            // Convert or notify
+            Toast.makeText(context, "Location updated", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // SAF Document picker for selecting any .vault file directly
+    val vaultFilePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            // If direct file scheme or content, try resolving
+            try {
+                val path = uri.path
+                if (path != null && File(path).exists()) {
+                    viewModel.onSelectVaultFile(File(path))
+                } else {
+                    Toast.makeText(context, "Selected container: ${uri.lastPathSegment}", Toast.LENGTH_SHORT).show()
+                }
+            } catch (_: Throwable) {}
+        }
+    }
+
+    LaunchedEffect(uiState.snackbarMessage) {
+        uiState.snackbarMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearSnackbarMessage()
+        }
+    }
+
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(VaultBg)
+            .background(VaultNavyBg)
     ) {
-        // Vault Header Card
-        VaultHeaderSection(
-            currentTab = uiState.currentTab,
-            onTabSelected = { viewModel.setTab(it) }
-        )
-
-        // Main content area
-        Box(modifier = Modifier.weight(1f)) {
-            when (uiState.currentTab) {
-                VaultTab.CREATE -> {
-                    CreatePanel(
-                        folderName = uiState.createFolderName,
-                        selectedSizeMB = uiState.createSizeMB,
-                        passwordInput = uiState.createPasswordInput,
-                        message = uiState.createMessage,
-                        isError = uiState.isCreateError,
-                        isProcessing = uiState.isProcessing,
-                        progressPercent = uiState.progressPercent,
-                        progressLabel = uiState.progressLabel,
-                        onPickFolder = { createFolderPicker.launch(null) },
-                        onSizeSelected = { viewModel.setCreateSize(it) },
-                        onPasswordChanged = { viewModel.setCreatePassword(it) },
-                        onGenerate = { viewModel.generateDatFile() }
-                    )
-                }
-                VaultTab.ACCESS -> {
-                    AccessPanel(
-                        state = uiState,
-                        onPickFolder = { accessFolderPicker.launch(null) },
-                        onPickDatDirect = { datFilePicker.launch(arrayOf("application/octet-stream", "*/*")) },
-                        onDatSelected = { viewModel.onDatFileDropdownSelected(it) },
-                        onPasswordChanged = { viewModel.setAccessPassword(it) },
-                        onUnlock = { viewModel.unlockVault() },
-                        onLock = { viewModel.lockAndClean() },
-                        onAddImages = {
-                            photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        },
-                        onSaveVault = { viewModel.saveVault() },
-                        onExportZip = { viewModel.exportToZip() },
-                        onExportGallery = { viewModel.exportToGallery() },
-                        onToggleSlideshow = { viewModel.toggleSlideshow() },
-                        onNewPasswordChanged = { viewModel.setNewPassword(it) },
-                        onResetPassword = { viewModel.resetPassword() },
-                        onResizeSizeChanged = { viewModel.setResizeSizeMB(it) },
-                        onResizeVault = { viewModel.resizeVault() },
-                        onSyncExVault = { viewModel.syncFromExVault() },
-                        onImageClick = { index -> viewModel.openModal(index) },
-                        onDeleteImage = { index -> viewModel.deleteImage(index) },
-                        onMoveLeft = { index -> if (index > 0) viewModel.moveImage(index, index - 1) },
-                        onMoveRight = { index -> if (index < uiState.images.size - 1) viewModel.moveImage(index, index + 1) }
-                    )
-                }
-            }
-        }
-    }
-
-    // Modal Viewer
-    uiState.activeModalIndex?.let { index ->
-        VaultModalViewer(
-            images = uiState.images,
-            currentIndex = index,
-            isSlideshowPlaying = uiState.isSlideshowPlaying,
-            isModalPaused = uiState.isModalPaused,
-            slideshowProgress = uiState.slideshowProgress,
-            onClose = { viewModel.closeModal() },
-            onNext = { viewModel.nextSlide() },
-            onPrevious = { viewModel.prevSlide() },
-            onToggleSlideshow = { viewModel.toggleSlideshow() },
-            onTogglePause = { viewModel.toggleModalPause() }
-        )
-    }
-}
-
-@Composable
-private fun VaultHeaderSection(
-    currentTab: VaultTab,
-    onTabSelected: (VaultTab) -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp)
         ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "⚡ DAT Vault Pro",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                }
-                Text(
-                    text = "Encrypted · Slideshow · Swipe · Auto-sync · Drag to reorder · Resize",
-                    fontSize = 11.sp,
-                    color = VaultMuted,
-                    modifier = Modifier.padding(top = 2.dp)
+            // 1. Header
+            VaultHeader()
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 2. Vault Location Panel
+            VaultLocationPanel(
+                currentLocation = uiState.selectedLocationDir?.absolutePath ?: "Default Storage",
+                onChooseLocation = { folderPickerLauncher.launch(null) },
+                onRefresh = { viewModel.scanAvailableVaults() }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 3. Container Selection & Password / Status Row
+            if (!uiState.isUnlocked) {
+                VaultLockedControls(
+                    uiState = uiState,
+                    onSelectFile = { viewModel.onSelectVaultFile(it) },
+                    onPasswordChange = { viewModel.setPasswordInput(it) },
+                    onTogglePasswordVisibility = { viewModel.togglePasswordVisibility() },
+                    onUnlock = { viewModel.unlockVault() },
+                    onOpenCreate = { viewModel.openCreateDialog() },
+                    onFilePicker = { vaultFilePickerLauncher.launch(arrayOf("*/*")) }
+                )
+            } else {
+                VaultUnlockedHeaderActions(
+                    uiState = uiState,
+                    onLock = { viewModel.lockVault() },
+                    onLockAndClear = { viewModel.lockAndClearSession() },
+                    onInfo = { viewModel.openVaultInfoDialog() },
+                    onCompact = { viewModel.compactVault() }
                 )
             }
-        }
 
-        Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-        // Mode Switcher Tabs
-        Surface(
-            color = Color(0x33000000),
-            shape = RoundedCornerShape(24.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(3.dp)
-            ) {
-                // Create Tab
-                val isCreate = currentTab == VaultTab.CREATE
-                val createBackground = if (isCreate) {
-                    Modifier.background(Brush.horizontalGradient(listOf(VaultAccent, VaultCyan)))
-                } else {
-                    Modifier.background(Color.Transparent)
-                }
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(38.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .then(createBackground)
-                        .clickable { onTabSelected(VaultTab.CREATE) }
-                        .testTag("vault_tab_create")
-                ) {
-                    Text(
-                        text = "✨ Create",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isCreate) Color.White else VaultMuted
-                    )
-                }
+            // 4. Vault Status Panel
+            VaultStatusPanel(
+                uiState = uiState,
+                onInfoClick = { viewModel.openVaultInfoDialog() }
+            )
 
-                // Access Tab
-                val isAccess = currentTab == VaultTab.ACCESS
-                val accessBackground = if (isAccess) {
-                    Modifier.background(Brush.horizontalGradient(listOf(VaultAccent, VaultCyan)))
-                } else {
-                    Modifier.background(Color.Transparent)
-                }
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(38.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .then(accessBackground)
-                        .clickable { onTabSelected(VaultTab.ACCESS) }
-                        .testTag("vault_tab_access")
-                ) {
-                    Text(
-                        text = "📂 Access",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isAccess) Color.White else VaultMuted
-                    )
-                }
-            }
-        }
-    }
-}
+            Spacer(modifier = Modifier.height(8.dp))
 
-@Composable
-private fun CreatePanel(
-    folderName: String?,
-    selectedSizeMB: Long,
-    passwordInput: String,
-    message: String?,
-    isError: Boolean,
-    isProcessing: Boolean,
-    progressPercent: Float,
-    progressLabel: String,
-    onPickFolder: () -> Unit,
-    onSizeSelected: (Long) -> Unit,
-    onPasswordChanged: (String) -> Unit,
-    onGenerate: () -> Unit
-) {
-    var sizeExpanded by remember { mutableStateOf(false) }
-    var showPassword by remember { mutableStateOf(false) }
-
-    val sizes = listOf(
-        1L to "1 MB",
-        5L to "5 MB",
-        10L to "10 MB",
-        25L to "25 MB",
-        50L to "50 MB",
-        100L to "100 MB",
-        200L to "200 MB",
-        500L to "500 MB",
-        1024L to "1 GB"
-    )
-
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Folder Selector
-        item {
-            Surface(
-                color = VaultCardBg,
-                shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = folderName?.let { "📁 $it" } ?: "📁 No folder chosen",
-                        color = if (folderName != null) VaultAccent2 else VaultMuted,
-                        fontSize = 13.sp,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = onPickFolder,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0x336C5CE7),
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(16.dp),
-                        modifier = Modifier.testTag("create_pick_folder_button")
-                    ) {
-                        Text("📁 Choose", fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-
-        // File Size Selector
-        item {
-            Column {
-                Text(
-                    text = "FILE SIZE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp,
-                    color = VaultMuted
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { sizeExpanded = true }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            val label = sizes.find { it.first == selectedSizeMB }?.second ?: "$selectedSizeMB MB"
-                            Text(
-                                text = "$label .dat container",
-                                color = Color.White,
-                                fontSize = 14.sp
-                            )
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = VaultMuted
-                            )
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = sizeExpanded,
-                        onDismissRequest = { sizeExpanded = false },
-                        modifier = Modifier.background(VaultCardBg)
-                    ) {
-                        sizes.forEach { (mb, lbl) ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = lbl,
-                                        color = if (mb == selectedSizeMB) VaultCyan else Color.White,
-                                        fontWeight = if (mb == selectedSizeMB) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                },
-                                onClick = {
-                                    sizeExpanded = false
-                                    onSizeSelected(mb)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Password PIN Input
-        item {
-            Column {
-                Text(
-                    text = "PASSWORD (4-8 DIGITS)",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp,
-                    color = VaultMuted
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                OutlinedTextField(
-                    value = passwordInput,
-                    onValueChange = onPasswordChanged,
-                    placeholder = { Text("Enter 4-8 digits", color = VaultMuted, fontSize = 14.sp) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(
-                                imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = null,
-                                tint = VaultMuted
-                            )
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.Black.copy(alpha = 0.5f),
-                        unfocusedContainerColor = Color.Black.copy(alpha = 0.5f),
-                        focusedBorderColor = VaultAccent,
-                        unfocusedBorderColor = VaultBorder,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("create_pin_input")
-                )
-            }
-        }
-
-        // Progress Bar
-        if (isProcessing) {
-            item {
-                Column {
-                    LinearProgressIndicator(
-                        progress = { progressPercent },
-                        color = VaultAccent,
-                        trackColor = Color.White.copy(alpha = 0.1f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp)
-                            .clip(CircleShape)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = progressLabel,
-                        fontSize = 11.sp,
-                        color = VaultMuted,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        }
-
-        // Generate Button
-        item {
-            Button(
-                onClick = onGenerate,
-                enabled = !isProcessing,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = VaultAccent,
-                    contentColor = Color.White
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("generate_dat_button")
-            ) {
-                if (isProcessing) {
-                    CircularProgressIndicator(
-                        color = Color.White,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text(
-                    text = "🔒 Generate DAT File",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-
-        // Feedback Message Card
-        if (!message.isNullOrEmpty()) {
-            item {
-                Surface(
-                    color = Color.Black.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isError) VaultDanger.copy(alpha = 0.5f) else VaultSuccess.copy(alpha = 0.5f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = message,
-                        color = if (isError) VaultDanger else VaultSuccess,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun AccessPanel(
-    state: VaultUiState,
-    onPickFolder: () -> Unit,
-    onPickDatDirect: () -> Unit,
-    onDatSelected: (Uri) -> Unit,
-    onPasswordChanged: (String) -> Unit,
-    onUnlock: () -> Unit,
-    onLock: () -> Unit,
-    onAddImages: () -> Unit,
-    onSaveVault: () -> Unit,
-    onExportZip: () -> Unit,
-    onExportGallery: () -> Unit,
-    onToggleSlideshow: () -> Unit,
-    onNewPasswordChanged: (String) -> Unit,
-    onResetPassword: () -> Unit,
-    onResizeSizeChanged: (Long) -> Unit,
-    onResizeVault: () -> Unit,
-    onSyncExVault: () -> Unit,
-    onImageClick: (Int) -> Unit,
-    onDeleteImage: (Int) -> Unit,
-    onMoveLeft: (Int) -> Unit,
-    onMoveRight: (Int) -> Unit
-) {
-    var showPassword by remember { mutableStateOf(false) }
-    var datDropdownExpanded by remember { mutableStateOf(false) }
-    var resizeDropdownExpanded by remember { mutableStateOf(false) }
-
-    val resizeSizes = listOf(
-        5L to "5 MB",
-        10L to "10 MB",
-        25L to "25 MB",
-        50L to "50 MB",
-        100L to "100 MB",
-        200L to "200 MB",
-        500L to "500 MB",
-        1024L to "1 GB"
-    )
-
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Folder for EX Vault or Direct File Picker Row
-        item {
-            Surface(
-                color = VaultCardBg,
-                shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = state.accessFolderName?.let { "📁 $it (EX Vault)" } ?: "📁 Folder for EX Vault",
-                        color = if (state.accessFolderName != null) VaultCyan else VaultMuted,
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Row {
-                        Button(
-                            onClick = onPickFolder,
-                            enabled = !state.isUnlocked,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0x336C5CE7),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.testTag("access_pick_folder_button")
-                        ) {
-                            Text("📁 Choose", fontSize = 11.sp)
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        OutlinedButton(
-                            onClick = onPickDatDirect,
-                            enabled = !state.isUnlocked,
-                            shape = RoundedCornerShape(14.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder),
-                            modifier = Modifier.testTag("access_pick_dat_button")
-                        ) {
-                            Text("Pick .dat", fontSize = 11.sp, color = VaultCyan)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Select .dat file dropdown
-        item {
-            Column {
-                Text(
-                    text = "SELECT .DAT FILE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.5.sp,
-                    color = VaultMuted
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Surface(
-                        color = Color.Black.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable(enabled = !state.isUnlocked && state.availableDatFiles.isNotEmpty()) {
-                                datDropdownExpanded = true
-                            }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            val text = state.selectedDatName ?: if (state.availableDatFiles.isEmpty()) "— First pick a folder or file —" else "— Select .dat file —"
-                            Text(
-                                text = text,
-                                color = if (state.selectedDatName != null) Color.White else VaultMuted,
-                                fontSize = 13.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = null,
-                                tint = VaultMuted
-                            )
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = datDropdownExpanded,
-                        onDismissRequest = { datDropdownExpanded = false },
-                        modifier = Modifier.background(VaultCardBg)
-                    ) {
-                        state.availableDatFiles.forEach { item ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = "${item.fileName} (${item.sizeBytes / (1024 * 1024)} MB)",
-                                        color = if (item.uri == state.selectedDatUri) VaultCyan else Color.White
-                                    )
-                                },
-                                onClick = {
-                                    datDropdownExpanded = false
-                                    onDatSelected(item.uri)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // PIN Input (Enabled when locked)
-        if (!state.isUnlocked) {
-            item {
-                Column {
-                    Text(
-                        text = "PASSWORD (4-8 DIGITS)",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.5.sp,
-                        color = VaultMuted
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    OutlinedTextField(
-                        value = state.accessPasswordInput,
-                        onValueChange = onPasswordChanged,
-                        placeholder = { Text("Enter PIN", color = VaultMuted, fontSize = 14.sp) },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { showPassword = !showPassword }) {
-                                Icon(
-                                    imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = null,
-                                    tint = VaultMuted
-                                )
-                            }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = Color.Black.copy(alpha = 0.5f),
-                            unfocusedContainerColor = Color.Black.copy(alpha = 0.5f),
-                            focusedBorderColor = VaultAccent,
-                            unfocusedBorderColor = VaultBorder,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("access_pin_input")
-                    )
-                }
-            }
-
-            // Unlock & Extract Button
-            item {
-                Button(
-                    onClick = onUnlock,
-                    enabled = !state.isProcessing && state.selectedDatUri != null,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = VaultAccent,
-                        contentColor = Color.White
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .testTag("unlock_vault_button")
-                ) {
-                    if (state.isProcessing) {
-                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Text("🔓 Unlock & Extract", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        // Status Row (Locked / Unlocked / Slideshow & Lock & Clean button)
-        item {
-            Surface(
-                color = Color.Black.copy(alpha = 0.35f),
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = "Status: ", color = VaultMuted, fontSize = 13.sp)
-                        val (statusBadgeBg, statusBadgeColor, statusText) = when (state.vaultStatus) {
-                            VaultStatus.LOCKED -> Triple(Color(0xFF2D3436), VaultMuted, "🔒 Locked")
-                            VaultStatus.UNLOCKED -> Triple(VaultSuccess, Color.Black, "🔓 Unlocked")
-                            VaultStatus.SLIDESHOW -> Triple(VaultWarning, Color.Black, "🎬 Slideshow")
-                        }
-                        Surface(
-                            color = statusBadgeBg,
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Text(
-                                text = statusText,
-                                color = statusBadgeColor,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-
-                    Button(
-                        onClick = onLock,
-                        enabled = state.isUnlocked,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = VaultDanger,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.testTag("lock_vault_button")
-                    ) {
-                        Text("🔒 Lock & Clean", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        }
-
-        // Progress Bar
-        if (state.isProcessing) {
-            item {
-                Column {
-                    LinearProgressIndicator(
-                        progress = { state.progressPercent },
-                        color = VaultCyan,
-                        trackColor = Color.White.copy(alpha = 0.1f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(4.dp)
-                            .clip(CircleShape)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = state.progressLabel,
-                        fontSize = 11.sp,
-                        color = VaultMuted,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        }
-
-        // Password Reset Row (Visible when unlocked)
-        if (state.isUnlocked && state.isPasswordResetVisible) {
-            item {
-                Surface(
-                    color = Color.Black.copy(alpha = 0.35f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = state.newPasswordInput,
-                            onValueChange = onNewPasswordChanged,
-                            placeholder = { Text("New PIN (4-8 digits)", color = VaultMuted, fontSize = 12.sp) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                            visualTransformation = PasswordVisualTransformation(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Color.Black.copy(alpha = 0.4f),
-                                unfocusedContainerColor = Color.Black.copy(alpha = 0.4f),
-                                focusedBorderColor = VaultAccent,
-                                unfocusedBorderColor = VaultBorder,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp)
-                                .testTag("reset_pin_input")
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = onResetPassword,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = VaultAccent,
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.height(46.dp)
-                        ) {
-                            Text("🔄 Reset", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Resize Container Row (Visible when unlocked)
-        if (state.isUnlocked && state.isResizeVisible) {
-            item {
-                Surface(
-                    color = Color.Black.copy(alpha = 0.35f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Resize:",
-                            color = VaultMuted,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 6.dp)
-                        )
-
-                        Box(modifier = Modifier.weight(1f)) {
-                            Surface(
-                                color = Color.Black.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(10.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable { resizeDropdownExpanded = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    val lbl = resizeSizes.find { it.first == state.resizeSizeMB }?.second ?: "${state.resizeSizeMB} MB"
-                                    Text(text = lbl, color = Color.White, fontSize = 12.sp)
-                                    Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null, tint = VaultMuted)
-                                }
-                            }
-
-                            DropdownMenu(
-                                expanded = resizeDropdownExpanded,
-                                onDismissRequest = { resizeDropdownExpanded = false },
-                                modifier = Modifier.background(VaultCardBg)
-                            ) {
-                                resizeSizes.forEach { (mb, lbl) ->
-                                    DropdownMenuItem(
-                                        text = { Text(lbl, color = Color.White) },
-                                        onClick = {
-                                            resizeDropdownExpanded = false
-                                            onResizeSizeChanged(mb)
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = onResizeVault,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = VaultSuccess,
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.height(44.dp)
-                        ) {
-                            Text("📏 Resize", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Action Rows (Add / Save / Sync EX / Gallery / ZIP / Slideshow)
-        if (state.isUnlocked) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Row 1: Core Vault Actions
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Add Button
-                        Button(
-                            onClick = onAddImages,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0x33FFFFFF),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                            modifier = Modifier.weight(1f).height(40.dp)
-                        ) {
-                            Text("🖼️ Add", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
-                        // Save Button
-                        Button(
-                            onClick = onSaveVault,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = VaultSuccess,
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                            modifier = Modifier.weight(1f).height(40.dp)
-                        ) {
-                            Text("💾 Save", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
-                        // Sync EX Button
-                        Button(
-                            onClick = onSyncExVault,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF6C5CE7),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                            modifier = Modifier.weight(1.1f).height(40.dp)
-                        ) {
-                            Text("🔄 Sync EX", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
-                        // Slideshow Button
-                        Button(
-                            onClick = onToggleSlideshow,
-                            enabled = state.images.size >= 2,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (state.isSlideshowPlaying) VaultWarning else Color(0xFFFD79A8),
-                                contentColor = if (state.isSlideshowPlaying) Color.Black else Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp),
-                            modifier = Modifier.weight(1.1f).height(40.dp)
-                        ) {
-                            Text(
-                                text = if (state.isSlideshowPlaying) "⏸ Pause" else "▶ Play",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    // Row 2: Export Options
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // Export to Gallery Button
-                        Button(
-                            onClick = onExportGallery,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF0984E3),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp),
-                            modifier = Modifier.weight(1f).height(38.dp)
-                        ) {
-                            Text("📤 Export to Gallery", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                        }
-
-                        // ZIP Button
-                        Button(
-                            onClick = onExportZip,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0x336C5CE7),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp),
-                            modifier = Modifier.weight(1f).height(38.dp)
-                        ) {
-                            Text("📥 Export as ZIP", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Feedback / Access Message Box
-        if (!state.accessMessage.isNullOrEmpty()) {
-            item {
-                Surface(
-                    color = Color.Black.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (state.isAccessError) VaultDanger.copy(alpha = 0.5f) else VaultAccent.copy(alpha = 0.5f)
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = state.accessMessage,
-                        color = if (state.isAccessError) VaultDanger else Color.White,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(12.dp)
-                    )
-                }
-            }
-        }
-
-        // EX Vault Live Location Card
-        if (state.isUnlocked) {
-            item {
+            // 5. Processing progress indicator
+            if (uiState.isProcessing) {
                 Surface(
                     color = VaultCardBg,
                     shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, VaultCyan.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
+                    border = BorderStroke(1.dp, VaultBorder),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("📁 Live Extracted Folder: ", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
-                                text = state.exVaultFolderName,
-                                fontWeight = FontWeight.Bold,
+                                text = uiState.progressLabel.ifEmpty { "Processing…" },
+                                color = Color.White,
                                 fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
                                 color = VaultCyan,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Your images are extracted to '${state.exVaultFolderName}'! You can open your phone's File Manager to view, add, or delete images directly.\n\n⚡ Auto-Detect & Auto-Update: Whenever you tap '🔒 Lock & Clean' (or switch back to the app), changes in 'EX Vault' are automatically detected, encrypted into your container, and plaintext files are wiped cleanly.",
-                            fontSize = 11.sp,
-                            color = VaultMuted,
-                            lineHeight = 15.sp
-                        )
-                    }
-                }
-            }
-
-            item {
-                Text(
-                    text = "↕ Tap ◀ ▶ to reorder images · Click to view · × to delete",
-                    fontSize = 11.sp,
-                    color = VaultMuted,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
-                )
-            }
-
-            // Image Gallery Thumbnails
-            if (state.images.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "📭 No images in vault.\nTap '🖼️ Add' to add photos.",
-                            color = VaultMuted,
-                            textAlign = TextAlign.Center,
-                            fontSize = 14.sp
-                        )
-                    }
-                }
-            } else {
-                // Render gallery grid inside LazyColumn via nested chunked rows
-                val chunkedImages = state.images.chunked(3)
-                items(chunkedImages.size) { rowIndex ->
-                    val rowItems = chunkedImages[rowIndex]
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        for (colIndex in 0 until 3) {
-                            if (colIndex < rowItems.size) {
-                                val index = rowIndex * 3 + colIndex
-                                val item = rowItems[colIndex]
-                                Box(modifier = Modifier.weight(1f)) {
-                                    VaultThumbnailCard(
-                                        image = item,
-                                        index = index,
-                                        total = state.images.size,
-                                        onClick = { onImageClick(index) },
-                                        onDelete = { onDeleteImage(index) },
-                                        onMoveLeft = { onMoveLeft(index) },
-                                        onMoveRight = { onMoveRight(index) }
-                                    )
-                                }
-                            } else {
-                                Spacer(modifier = Modifier.weight(1f))
-                            }
+                        if (uiState.progressPercent > 0f) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LinearProgressIndicator(
+                                progress = { uiState.progressPercent },
+                                modifier = Modifier.fillMaxWidth().height(4.dp),
+                                color = VaultCyan,
+                                trackColor = Color.White.copy(alpha = 0.1f)
+                            )
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(4.dp))
             }
-        } else {
-            // Locked Placeholder
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(180.dp),
-                    contentAlignment = Alignment.Center
+
+            // 6. Main Area: Locked State View vs Unlocked Gallery
+            if (!uiState.isUnlocked) {
+                LockedStatePlaceholder(
+                    message = uiState.statusMessage,
+                    isError = uiState.isError,
+                    onOpenCreate = { viewModel.openCreateDialog() }
+                )
+            } else {
+                UnlockedGalleryView(
+                    uiState = uiState,
+                    onAddImages = {
+                        showAddImagesChoiceDialog = true
+                    },
+                    onImageClick = { index -> viewModel.openModal(index) },
+                    onImageLongClick = { img -> viewModel.toggleSelectImage(img.id) },
+                    onToggleSelect = { id -> viewModel.toggleSelectImage(id) },
+                    onSelectAll = { viewModel.selectAll() },
+                    onClearSelect = { viewModel.clearSelection() },
+                    onDeleteSelected = { viewModel.deleteSelectedImages() },
+                    onExportSelected = { viewModel.exportSelectedImages() },
+                    onShareSelected = { viewModel.shareSelectedImages(context) },
+                    onOpenCreateFolder = { viewModel.openCreateFolderDialog() },
+                    onSelectFolder = { folderId -> viewModel.setFolder(folderId) },
+                    onRenameImage = { img -> viewModel.openRenameDialog(img) },
+                    onMoveSelected = { viewModel.openMoveDialog() },
+                    onSearchQueryChange = { viewModel.setSearchQuery(it) },
+                    onSortModeChange = { viewModel.setSortMode(it) },
+                    onToggleViewMode = { viewModel.toggleGridView() },
+                    onImportToSsi = { img -> viewModel.importImageToSsi(img) }
+                )
+            }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp)
+        )
+
+        // Fullscreen Modal Viewer
+        uiState.activeModalIndex?.let { index ->
+            VaultModalViewer(
+                images = uiState.displayedImages,
+                currentIndex = index,
+                isSlideshowPlaying = uiState.isSlideshowPlaying,
+                isModalPaused = uiState.isModalPaused,
+                slideshowProgress = uiState.slideshowProgress,
+                onClose = { viewModel.closeModal() },
+                onNext = { viewModel.nextImage() },
+                onPrevious = { viewModel.previousImage() },
+                onToggleSlideshow = { viewModel.toggleSlideshow() },
+                onTogglePause = { viewModel.togglePause() },
+                onImportToSsi = { image -> viewModel.importImageToSsi(image) }
+            )
+        }
+
+        // Dialogs
+        if (showAddImagesChoiceDialog) {
+            AddImagesChoiceDialog(
+                onDismiss = { showAddImagesChoiceDialog = false },
+                onChooseBatch500 = {
+                    showAddImagesChoiceDialog = false
+                    batchImagePickerLauncher.launch(arrayOf("image/*"))
+                },
+                onChoosePhotoPicker100 = {
+                    showAddImagesChoiceDialog = false
+                    photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }
+            )
+        }
+
+        if (uiState.isCreateDialogOpen) {
+            CreateVaultDialog(
+                onDismiss = { viewModel.closeCreateDialog() },
+                onCreate = { name, pass, confirm, cap ->
+                    viewModel.createVault(name, pass, confirm, cap)
+                }
+            )
+        }
+
+        if (uiState.showRecoveryKeyDialog && uiState.generatedRecoveryKey != null) {
+            RecoveryKeyDialog(
+                recoveryKey = uiState.generatedRecoveryKey!!,
+                onDismiss = { viewModel.closeRecoveryKeyDialog() }
+            )
+        }
+
+        if (uiState.isVaultInfoDialogOpen && uiState.metadata != null) {
+            VaultInfoDialog(
+                metadata = uiState.metadata!!,
+                file = uiState.selectedVaultFile,
+                onDismiss = { viewModel.closeVaultInfoDialog() }
+            )
+        }
+
+        if (uiState.isCreateFolderDialogOpen) {
+            CreateFolderDialog(
+                onDismiss = { viewModel.closeCreateFolderDialog() },
+                onCreate = { name -> viewModel.createFolder(name) }
+            )
+        }
+
+        if (uiState.isRenameDialogOpen && uiState.renameTargetImage != null) {
+            RenameImageDialog(
+                currentName = uiState.renameTargetImage!!.name,
+                onDismiss = { viewModel.closeRenameDialog() },
+                onRename = { newName -> viewModel.renameImage(newName) }
+            )
+        }
+
+        if (uiState.isMoveDialogOpen) {
+            MoveImagesDialog(
+                folders = uiState.folders,
+                onDismiss = { viewModel.closeMoveDialog() },
+                onMove = { targetId -> viewModel.moveSelectedImages(targetId) }
+            )
+        }
+    }
+}
+
+// ==========================================
+// 1. Header
+// ==========================================
+@Composable
+private fun VaultHeader() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "IMG Vault",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Surface(
+                    color = VaultAccent.copy(alpha = 0.25f),
+                    shape = RoundedCornerShape(6.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = null,
-                            tint = VaultMuted,
-                            modifier = Modifier.size(42.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "🔒 Unlock vault to view and manage images",
-                            color = VaultMuted,
-                            fontSize = 13.sp
-                        )
-                    }
+                    Text(
+                        text = "ENCRYPTED .VAULT",
+                        color = VaultCyan,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            Text(
+                text = "Encrypted Images • Offline • Low RAM • Portable",
+                fontSize = 11.sp,
+                color = VaultMuted,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+// ==========================================
+// 2. Vault Location Panel
+// ==========================================
+@Composable
+private fun VaultLocationPanel(
+    currentLocation: String,
+    onChooseLocation: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    Surface(
+        color = VaultCardBg,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, VaultBorder),
+        modifier = Modifier.fillMaxWidth().testTag("vault_location_panel")
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = VaultCyan, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("Vault Location", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = VaultMuted)
+                    Text(
+                        text = currentLocation.substringAfterLast("media/").ifEmpty { currentLocation },
+                        fontSize = 12.sp,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier.size(32.dp).testTag("btn_refresh_location")
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = VaultMuted, modifier = Modifier.size(16.dp))
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                Button(
+                    onClick = onChooseLocation,
+                    colors = ButtonDefaults.buttonColors(containerColor = VaultAccent.copy(alpha = 0.3f), contentColor = Color.White),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.height(28.dp).testTag("btn_choose_location")
+                ) {
+                    Text("Choose", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
 }
 
+// ==========================================
+// 3. Locked Controls (Selection & Password)
+// ==========================================
 @Composable
-private fun VaultThumbnailCard(
-    image: VaultImage,
-    index: Int,
-    total: Int,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
-    onMoveLeft: () -> Unit,
-    onMoveRight: () -> Unit
+private fun VaultLockedControls(
+    uiState: VaultUiState,
+    onSelectFile: (File) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onTogglePasswordVisibility: () -> Unit,
+    onUnlock: () -> Unit,
+    onOpenCreate: () -> Unit,
+    onFilePicker: () -> Unit
 ) {
-    val context = LocalContext.current
+    var dropdownExpanded by remember { mutableStateOf(false) }
 
     Surface(
-        color = Color(0xFF1A1A2E),
-        shape = RoundedCornerShape(10.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, VaultBorder),
+        color = VaultCardBg,
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, VaultBorder),
+        modifier = Modifier.fillMaxWidth().testTag("vault_locked_controls")
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Container Selector
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "SELECT VAULT FILE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = VaultCyan
+                )
+
+                Row {
+                    TextButton(
+                        onClick = onFilePicker,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("Browse", fontSize = 11.sp, color = VaultAccent)
+                    }
+                    TextButton(
+                        onClick = onOpenCreate,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text("+ Create Vault", fontSize = 11.sp, color = VaultSuccess, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Dropdown Selector Button
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    modifier = Modifier.fillMaxWidth().clickable { dropdownExpanded = true }
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = VaultMuted, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = uiState.selectedVaultName ?: (if (uiState.availableVaultFiles.isEmpty()) "No .vault found (Create one)" else "Choose .vault file"),
+                                color = if (uiState.selectedVaultFile != null) Color.White else VaultMuted,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Text("▼", color = VaultMuted, fontSize = 10.sp)
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = dropdownExpanded,
+                    onDismissRequest = { dropdownExpanded = false },
+                    modifier = Modifier.background(VaultCardBg)
+                ) {
+                    if (uiState.availableVaultFiles.isEmpty()) {
+                        DropdownMenuItem(
+                            text = { Text("No .vault files in this location", color = VaultMuted, fontSize = 12.sp) },
+                            onClick = { dropdownExpanded = false }
+                        )
+                    } else {
+                        uiState.availableVaultFiles.forEach { item ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(item.fileName, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("${item.sizeBytes / (1024*1024)} MB", color = VaultMuted, fontSize = 10.sp)
+                                    }
+                                },
+                                onClick = {
+                                    onSelectFile(item.file)
+                                    dropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Password Field
+            OutlinedTextField(
+                value = uiState.passwordInput,
+                onValueChange = onPasswordChange,
+                label = { Text("VAULT PASSWORD", fontSize = 11.sp) },
+                placeholder = { Text("Enter master password or recovery key", fontSize = 12.sp) },
+                singleLine = true,
+                visualTransformation = if (uiState.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = onTogglePasswordVisibility) {
+                        Icon(
+                            imageVector = if (uiState.isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = if (uiState.isPasswordVisible) "Hide Password" else "Show Password",
+                            tint = VaultMuted
+                        )
+                    }
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onUnlock() }),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = VaultCyan,
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.15f),
+                    focusedLabelColor = VaultCyan,
+                    unfocusedLabelColor = VaultMuted,
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    cursorColor = VaultCyan
+                ),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth().testTag("input_vault_password")
+            )
+
+            if (uiState.statusMessage != null && uiState.isError) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = uiState.statusMessage ?: "",
+                    color = VaultDanger,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Unlock Button
+            Button(
+                onClick = onUnlock,
+                enabled = uiState.selectedVaultFile != null && uiState.passwordInput.isNotBlank() && !uiState.isProcessing,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = VaultCyan,
+                    contentColor = Color.Black,
+                    disabledContainerColor = Color.White.copy(alpha = 0.08f),
+                    disabledContentColor = VaultMuted
+                ),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth().height(44.dp).testTag("btn_unlock_vault")
+            ) {
+                Icon(Icons.Default.LockOpen, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Unlock Vault", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+// ==========================================
+// Unlocked Header Actions
+// ==========================================
+@Composable
+private fun VaultUnlockedHeaderActions(
+    uiState: VaultUiState,
+    onLock: () -> Unit,
+    onLockAndClear: () -> Unit,
+    onInfo: () -> Unit,
+    onCompact: () -> Unit
+) {
+    Surface(
+        color = VaultCardBg,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, VaultBorder),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Button(
+                    onClick = onLock,
+                    colors = ButtonDefaults.buttonColors(containerColor = VaultDanger.copy(alpha = 0.25f), contentColor = VaultDanger),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp).testTag("btn_lock_vault")
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Lock Vault", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                OutlinedButton(
+                    onClick = onLockAndClear,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = VaultMuted),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.15f)),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp).testTag("btn_lock_clear_session")
+                ) {
+                    Text("Lock & Clear", fontSize = 11.sp)
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onCompact, modifier = Modifier.size(32.dp).testTag("btn_compact_vault")) {
+                    Icon(Icons.Default.Tune, contentDescription = "Compact Vault", tint = VaultCyan, modifier = Modifier.size(16.dp))
+                }
+                IconButton(onClick = onInfo, modifier = Modifier.size(32.dp).testTag("btn_vault_info")) {
+                    Icon(Icons.Default.Info, contentDescription = "Vault Information", tint = Color.White, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// 4. Status Panel
+// ==========================================
+@Composable
+private fun VaultStatusPanel(
+    uiState: VaultUiState,
+    onInfoClick: () -> Unit
+) {
+    val meta = uiState.metadata
+    val isUnlocked = uiState.isUnlocked
+
+    Surface(
+        color = VaultCardBg,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, VaultBorder),
+        modifier = Modifier.fillMaxWidth().testTag("vault_status_panel")
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(if (isUnlocked) VaultSuccess else VaultDanger, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isUnlocked) "UNLOCKED" else "LOCKED",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isUnlocked) VaultSuccess else VaultDanger
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "• ${uiState.selectedVaultName ?: "None"}",
+                        fontSize = 12.sp,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (isUnlocked && meta != null) {
+                    Text(
+                        text = "${meta.activeImageCount} images",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = VaultCyan
+                    )
+                }
+            }
+
+            if (isUnlocked && meta != null) {
+                Spacer(modifier = Modifier.height(6.dp))
+                val usedMB = meta.totalUsedBytes / (1024 * 1024)
+                val maxGB = meta.maxCapacityBytes / (1024L * 1024 * 1024)
+                val availGB = "%.2f".format(meta.availableBytes.toDouble() / (1024.0 * 1024 * 1024))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Used: $usedMB MB of $maxGB GB", fontSize = 11.sp, color = VaultMuted)
+                    Text("Available: $availGB GB", fontSize = 11.sp, color = VaultSuccess)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                val fraction = (meta.totalUsedBytes.toFloat() / meta.maxCapacityBytes.coerceAtLeast(1L)).coerceIn(0f, 1f)
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth().height(4.dp),
+                    color = VaultCyan,
+                    trackColor = Color.White.copy(alpha = 0.1f)
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// Locked State Placeholder
+// ==========================================
+@Composable
+private fun LockedStatePlaceholder(
+    message: String?,
+    isError: Boolean,
+    onOpenCreate: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            color = Color.White.copy(alpha = 0.05f),
+            shape = CircleShape,
+            modifier = Modifier.size(72.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = VaultCyan,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Unlock your vault to view and manage private images.",
+            color = Color.White,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "All images are encrypted using AES-256-GCM directly inside the portable .vault file with zero RAM pre-allocation.",
+            color = VaultMuted,
+            fontSize = 11.sp,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        OutlinedButton(
+            onClick = onOpenCreate,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = VaultCyan),
+            border = BorderStroke(1.dp, VaultCyan.copy(alpha = 0.5f)),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Create New Vault", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+// ==========================================
+// 5. Unlocked Gallery View
+// ==========================================
+@Composable
+private fun UnlockedGalleryView(
+    uiState: VaultUiState,
+    onAddImages: () -> Unit,
+    onImageClick: (Int) -> Unit,
+    onImageLongClick: (VaultImage) -> Unit,
+    onToggleSelect: (String) -> Unit,
+    onSelectAll: () -> Unit,
+    onClearSelect: () -> Unit,
+    onDeleteSelected: () -> Unit,
+    onExportSelected: () -> Unit,
+    onShareSelected: () -> Unit,
+    onOpenCreateFolder: () -> Unit,
+    onSelectFolder: (String?) -> Unit,
+    onRenameImage: (VaultImage) -> Unit,
+    onMoveSelected: () -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onSortModeChange: (VaultSortMode) -> Unit,
+    onToggleViewMode: () -> Unit,
+    onImportToSsi: (VaultImage) -> Unit
+) {
+    var sortMenuExpanded by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Folders Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // "All" folder chip
+            FilterChip(
+                selected = uiState.currentFolderId == null,
+                onClick = { onSelectFolder(null) },
+                label = { Text("All (${uiState.images.size})", fontSize = 11.sp) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = VaultAccent,
+                    selectedLabelColor = Color.White,
+                    containerColor = VaultCardBg,
+                    labelColor = VaultMuted
+                ),
+                shape = RoundedCornerShape(16.dp)
+            )
+
+            uiState.folders.forEach { folder ->
+                val count = uiState.images.count { it.folderId == folder.id }
+                FilterChip(
+                    selected = uiState.currentFolderId == folder.id,
+                    onClick = { onSelectFolder(folder.id) },
+                    label = { Text("${folder.name} ($count)", fontSize = 11.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = VaultAccent,
+                        selectedLabelColor = Color.White,
+                        containerColor = VaultCardBg,
+                        labelColor = VaultMuted
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                )
+            }
+
+            // New Folder Button
+            IconButton(
+                onClick = onOpenCreateFolder,
+                modifier = Modifier.size(32.dp).testTag("btn_create_folder")
+            ) {
+                Icon(Icons.Default.CreateNewFolder, contentDescription = "New Folder", tint = VaultCyan, modifier = Modifier.size(18.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Search & Controls Bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Search Input
+            OutlinedTextField(
+                value = uiState.searchQuery,
+                onValueChange = onSearchQueryChange,
+                placeholder = { Text("Search photos…", fontSize = 11.sp, color = VaultMuted) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = VaultMuted, modifier = Modifier.size(16.dp)) },
+                trailingIcon = {
+                    if (uiState.searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchQueryChange("") }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = VaultMuted, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = VaultCyan,
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.1f),
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White
+                ),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.weight(1f).height(42.dp)
+            )
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            // Sort Menu
+            Box {
+                IconButton(
+                    onClick = { sortMenuExpanded = true },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.Sort, contentDescription = "Sort", tint = Color.White)
+                }
+
+                DropdownMenu(
+                    expanded = sortMenuExpanded,
+                    onDismissRequest = { sortMenuExpanded = false },
+                    modifier = Modifier.background(VaultCardBg)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Date (Newest first)", color = Color.White, fontSize = 12.sp) },
+                        onClick = { onSortModeChange(VaultSortMode.DATE_DESC); sortMenuExpanded = false }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Name (A–Z)", color = Color.White, fontSize = 12.sp) },
+                        onClick = { onSortModeChange(VaultSortMode.NAME_ASC); sortMenuExpanded = false }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Size (Largest first)", color = Color.White, fontSize = 12.sp) },
+                        onClick = { onSortModeChange(VaultSortMode.SIZE_DESC); sortMenuExpanded = false }
+                    )
+                }
+            }
+
+            // Grid / List toggle
+            IconButton(
+                onClick = onToggleViewMode,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = if (uiState.isGridView) Icons.Default.ViewList else Icons.Default.GridView,
+                    contentDescription = "Toggle View",
+                    tint = Color.White
+                )
+            }
+
+            // Add Images Button
+            Button(
+                onClick = onAddImages,
+                colors = ButtonDefaults.buttonColors(containerColor = VaultCyan, contentColor = Color.Black),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                modifier = Modifier.height(36.dp).testTag("btn_add_images")
+            ) {
+                Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("+ Add (500)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // Multi-select Action Bar
+        if (uiState.isMultiSelectActive) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Surface(
+                color = VaultAccent.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, VaultAccent),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${uiState.selectedImageIds.size} selected",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onSelectAll, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Check, contentDescription = "Select All", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = onMoveSelected, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.DriveFileMove, contentDescription = "Move", tint = VaultCyan, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = onExportSelected, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.FileDownload, contentDescription = "Export", tint = VaultSuccess, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = onShareSelected, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = onDeleteSelected, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = VaultDanger, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = onClearSelect, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = VaultMuted, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Image List or Grid
+        val images = uiState.displayedImages
+        if (images.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, tint = VaultMuted, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("No images in this folder yet", color = VaultMuted, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = onAddImages,
+                        colors = ButtonDefaults.buttonColors(containerColor = VaultAccent),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Add Images (Up to 500)", fontSize = 12.sp)
+                    }
+                }
+            }
+        } else if (uiState.isGridView) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 100.dp),
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(bottom = 60.dp)
+            ) {
+                items(images, key = { it.id }) { image ->
+                    val isSelected = uiState.selectedImageIds.contains(image.id)
+                    val idx = images.indexOf(image)
+                    VaultImageGridCard(
+                        image = image,
+                        isSelected = isSelected,
+                        isMultiSelectActive = uiState.isMultiSelectActive,
+                        onClick = {
+                            if (uiState.isMultiSelectActive) {
+                                onToggleSelect(image.id)
+                            } else {
+                                onImageClick(idx)
+                            }
+                        },
+                        onLongClick = { onImageLongClick(image) },
+                        onRename = { onRenameImage(image) },
+                        onImportToSsi = { onImportToSsi(image) }
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                contentPadding = PaddingValues(bottom = 60.dp)
+            ) {
+                items(images, key = { it.id }) { image ->
+                    val isSelected = uiState.selectedImageIds.contains(image.id)
+                    val idx = images.indexOf(image)
+                    VaultImageListCard(
+                        image = image,
+                        isSelected = isSelected,
+                        isMultiSelectActive = uiState.isMultiSelectActive,
+                        onClick = {
+                            if (uiState.isMultiSelectActive) {
+                                onToggleSelect(image.id)
+                            } else {
+                                onImageClick(idx)
+                            }
+                        },
+                        onLongClick = { onImageLongClick(image) },
+                        onRename = { onRenameImage(image) },
+                        onImportToSsi = { onImportToSsi(image) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// Grid Card
+// ==========================================
+@Composable
+private fun VaultImageGridCard(
+    image: VaultImage,
+    isSelected: Boolean,
+    isMultiSelectActive: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onRename: () -> Unit,
+    onImportToSsi: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = VaultCardBg),
+        border = BorderStroke(
+            1.dp,
+            if (isSelected) VaultCyan else Color.White.copy(alpha = 0.08f)
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Low-RAM thumbnail: Coil with downscaled bounds
             SubcomposeAsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(image.file)
-                    .size(240, 240)
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(image.thumbnailFile ?: image.file)
                     .crossfade(true)
                     .build(),
                 contentDescription = image.name,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
                 loading = {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = VaultAccent, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        CircularProgressIndicator(strokeWidth = 2.dp, color = VaultCyan, modifier = Modifier.size(20.dp))
                     }
                 },
-                error = {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(imageVector = Icons.Default.PhotoLibrary, contentDescription = null, tint = VaultMuted)
-                    }
-                }
+                modifier = Modifier.fillMaxSize()
             )
 
-            // Top Delete Button (×)
-            Surface(
-                color = VaultDanger,
-                shape = CircleShape,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(4.dp)
-                    .size(22.dp)
-                    .clickable(onClick = onDelete)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("×", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            // Bottom Name and Reorder Bar
-            Surface(
-                color = Color.Black.copy(alpha = 0.75f),
+            // Bottom Name Label
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .padding(horizontal = 4.dp, vertical = 2.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    if (index > 0) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Move Left",
-                            tint = Color.White,
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clickable(onClick = onMoveLeft)
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.size(14.dp))
-                    }
+                Text(
+                    text = image.name,
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
-                    Text(
-                        text = image.name,
-                        fontSize = 9.sp,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
-                        textAlign = TextAlign.Center
-                    )
-
-                    if (index < total - 1) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                            contentDescription = "Move Right",
-                            tint = Color.White,
-                            modifier = Modifier
-                                .size(14.dp)
-                                .clickable(onClick = onMoveRight)
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.size(14.dp))
-                    }
-                }
+            // Selection Checkbox
+            if (isMultiSelectActive) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick() },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = VaultCyan,
+                        checkmarkColor = Color.Black
+                    ),
+                    modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
+                )
             }
         }
     }
+}
+
+// ==========================================
+// List Card
+// ==========================================
+@Composable
+private fun VaultImageListCard(
+    image: VaultImage,
+    isSelected: Boolean,
+    isMultiSelectActive: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onRename: () -> Unit,
+    onImportToSsi: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = VaultCardBg),
+        border = BorderStroke(1.dp, if (isSelected) VaultCyan else Color.White.copy(alpha = 0.08f)),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SubcomposeAsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(image.thumbnailFile ?: image.file)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = image.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(6.dp))
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = image.name,
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val sizeKB = image.sizeBytes / 1024
+                val dateStr = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(image.createdAt))
+                Text(
+                    text = "$sizeKB KB • $dateStr",
+                    color = VaultMuted,
+                    fontSize = 11.sp
+                )
+            }
+
+            // Action buttons
+            IconButton(onClick = onImportToSsi, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.FileDownload, contentDescription = "Import to SSI", tint = VaultAccent, modifier = Modifier.size(18.dp))
+            }
+            IconButton(onClick = onRename, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Rename", tint = VaultMuted, modifier = Modifier.size(16.dp))
+            }
+
+            if (isMultiSelectActive) {
+                Checkbox(
+                    checked = isSelected,
+                    onCheckedChange = { onClick() },
+                    colors = CheckboxDefaults.colors(checkedColor = VaultCyan, checkmarkColor = Color.Black)
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
+// Dialogs: Create, Recovery, Info, Folders
+// ==========================================
+@Composable
+private fun CreateVaultDialog(
+    onDismiss: () -> Unit,
+    onCreate: (name: String, pass: String, confirm: String, capacityBytes: Long) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var selectedCapacity by remember { mutableStateOf(ImgVaultEngine.CAPACITY_5GB) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create New IMG Vault", fontWeight = FontWeight.Bold, color = Color.White) },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                Text(
+                    text = "A secure container (.vault) will be created. It only consumes storage as images are imported.",
+                    fontSize = 11.sp,
+                    color = VaultMuted
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Vault Name") },
+                    placeholder = { Text("e.g. Personal_Gallery") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("Max Capacity Limit", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = selectedCapacity == ImgVaultEngine.CAPACITY_5GB,
+                        onClick = { selectedCapacity = ImgVaultEngine.CAPACITY_5GB },
+                        colors = RadioButtonDefaults.colors(selectedColor = VaultCyan)
+                    )
+                    Text("5 GB Limit", fontSize = 12.sp, color = Color.White)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    RadioButton(
+                        selected = selectedCapacity == ImgVaultEngine.CAPACITY_10GB,
+                        onClick = { selectedCapacity = ImgVaultEngine.CAPACITY_10GB },
+                        colors = RadioButtonDefaults.colors(selectedColor = VaultCyan)
+                    )
+                    Text("10 GB Limit", fontSize = 12.sp, color = Color.White)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Vault Password (min 6 chars)") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it },
+                    label = { Text("Confirm Password") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onCreate(name, password, confirmPassword, selectedCapacity) },
+                colors = ButtonDefaults.buttonColors(containerColor = VaultCyan, contentColor = Color.Black)
+            ) {
+                Text("Create Vault", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = VaultMuted) }
+        },
+        containerColor = VaultCardBg
+    )
+}
+
+@Composable
+private fun RecoveryKeyDialog(
+    recoveryKey: String,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.LockReset, contentDescription = null, tint = VaultWarning)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Emergency Recovery Key", fontWeight = FontWeight.Bold, color = Color.White)
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = "Save this 32-character recovery key in a safe place. If you forget your vault password, this key can restore access to your encrypted images.",
+                    fontSize = 12.sp,
+                    color = VaultMuted
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    color = Color.Black.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, VaultWarning.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().padding(4.dp)
+                ) {
+                    Text(
+                        text = recoveryKey,
+                        color = VaultWarning,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val clip = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clip.setPrimaryClip(ClipData.newPlainText("Recovery Key", recoveryKey))
+                    Toast.makeText(context, "Recovery key copied to clipboard!", Toast.LENGTH_SHORT).show()
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = VaultCyan, contentColor = Color.Black)
+            ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Copy & Close")
+            }
+        },
+        containerColor = VaultCardBg
+    )
+}
+
+@Composable
+private fun VaultInfoDialog(
+    metadata: com.example.util.ImgVaultMetadata,
+    file: File?,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Vault Information", fontWeight = FontWeight.Bold, color = Color.White) },
+        text = {
+            Column {
+                Text("Name: ${metadata.name}", color = Color.White, fontSize = 13.sp)
+                Text("File: ${file?.name ?: "Unknown"}", color = VaultMuted, fontSize = 12.sp)
+                Text("Format: Encrypted .vault (AES-256-GCM)", color = VaultCyan, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                val usedMB = metadata.totalUsedBytes / (1024 * 1024)
+                val maxGB = metadata.maxCapacityBytes / (1024L * 1024 * 1024)
+                Text("Storage: $usedMB MB used of $maxGB GB limit", color = Color.White, fontSize = 12.sp)
+                Text("Active Images: ${metadata.activeImageCount}", color = Color.White, fontSize = 12.sp)
+                Text("Folders: ${metadata.folders.size}", color = Color.White, fontSize = 12.sp)
+                val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(metadata.createdAt))
+                Text("Created: $dateStr", color = VaultMuted, fontSize = 11.sp)
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = VaultAccent)) {
+                Text("Close")
+            }
+        },
+        containerColor = VaultCardBg
+    )
+}
+
+@Composable
+private fun CreateFolderDialog(
+    onDismiss: () -> Unit,
+    onCreate: (name: String) -> Unit
+) {
+    var folderName by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create Folder", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            OutlinedTextField(
+                value = folderName,
+                onValueChange = { folderName = it },
+                label = { Text("Folder Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onCreate(folderName) },
+                colors = ButtonDefaults.buttonColors(containerColor = VaultCyan, contentColor = Color.Black)
+            ) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = VaultMuted) }
+        },
+        containerColor = VaultCardBg
+    )
+}
+
+@Composable
+private fun RenameImageDialog(
+    currentName: String,
+    onDismiss: () -> Unit,
+    onRename: (newName: String) -> Unit
+) {
+    var newName by remember { mutableStateOf(currentName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Rename Image", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                label = { Text("Image Name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onRename(newName) },
+                colors = ButtonDefaults.buttonColors(containerColor = VaultCyan, contentColor = Color.Black)
+            ) {
+                Text("Rename")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = VaultMuted) }
+        },
+        containerColor = VaultCardBg
+    )
+}
+
+@Composable
+private fun MoveImagesDialog(
+    folders: List<com.example.util.ImgVaultFolder>,
+    onDismiss: () -> Unit,
+    onMove: (targetFolderId: String?) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Move to Folder", color = Color.White, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("Select destination folder:", fontSize = 12.sp, color = VaultMuted)
+                Spacer(modifier = Modifier.height(8.dp))
+                folders.forEach { f ->
+                    Surface(
+                        color = Color.White.copy(alpha = 0.05f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                            .clickable { onMove(f.id) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Folder, contentDescription = null, tint = VaultCyan, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(f.name, color = Color.White, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel", color = VaultMuted) }
+        },
+        containerColor = VaultCardBg
+    )
+}
+
+@Composable
+private fun AddImagesChoiceDialog(
+    onDismiss: () -> Unit,
+    onChooseBatch500: () -> Unit,
+    onChoosePhotoPicker100: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = VaultCardBg,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.AddPhotoAlternate,
+                    contentDescription = null,
+                    tint = VaultCyan,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Add Images to Vault",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Select how you would like to pick photos. The batch picker allows selecting up to 500 images at a time:",
+                    color = VaultMuted,
+                    fontSize = 12.sp
+                )
+
+                // Option 1: Up to 500
+                Surface(
+                    onClick = onChooseBatch500,
+                    color = VaultAccent.copy(alpha = 0.25f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, VaultCyan.copy(alpha = 0.6f)),
+                    modifier = Modifier.fillMaxWidth().testTag("opt_batch_picker_500")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = VaultCyan.copy(alpha = 0.2f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.DriveFolderUpload,
+                                    contentDescription = null,
+                                    tint = VaultCyan,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Batch Picker",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    color = VaultCyan,
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "UP TO 500",
+                                        color = Color.Black,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Select up to 500 images at once from Gallery, Camera, Pictures, or SD Card with no 100-photo limit.",
+                                color = VaultMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                // Option 2: Up to 100
+                Surface(
+                    onClick = onChoosePhotoPicker100,
+                    color = Color.White.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)),
+                    modifier = Modifier.fillMaxWidth().testTag("opt_photo_picker_100")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.1f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.PhotoLibrary,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "System Photo Grid",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    color = Color.White.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "UP TO 100",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Standard Android visual picker (hard-capped to 100 items by Android OS).",
+                                color = VaultMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = VaultMuted, fontSize = 13.sp)
+            }
+        }
+    )
 }

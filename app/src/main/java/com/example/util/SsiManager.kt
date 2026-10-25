@@ -7,9 +7,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.nio.charset.StandardCharsets
 
 data class SsiImage(
     val file: File,
@@ -22,6 +24,7 @@ data class SsiImage(
 object SsiManager {
 
     private val IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp", "gif", "bmp", "avif")
+    private const val ORDER_FILE_NAME = "ssi_order.json"
 
     private val _importedImages = MutableStateFlow<List<SsiImage>>(emptyList())
     val importedImages: StateFlow<List<SsiImage>> = _importedImages.asStateFlow()
@@ -30,14 +33,58 @@ object SsiManager {
         refresh(context)
     }
 
+    private fun loadSavedOrder(context: Context): List<String> {
+        return try {
+            val orderFile = File(AppStorageHelper.getMediaImportedDir(context), ORDER_FILE_NAME)
+            if (!orderFile.exists() || orderFile.length() == 0L) return emptyList()
+            val text = orderFile.readText(StandardCharsets.UTF_8)
+            val jsonArray = JSONArray(text)
+            val list = mutableListOf<String>()
+            for (i in 0 until jsonArray.length()) {
+                list.add(jsonArray.getString(i))
+            }
+            list
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    private fun saveOrder(context: Context, orderedNames: List<String>) {
+        try {
+            val dir = AppStorageHelper.getMediaImportedDir(context)
+            if (!dir.exists()) dir.mkdirs()
+            val orderFile = File(dir, ORDER_FILE_NAME)
+            val jsonArray = JSONArray()
+            orderedNames.forEach { jsonArray.put(it) }
+            orderFile.writeText(jsonArray.toString(), StandardCharsets.UTF_8)
+            MediaZipEncryptionHelper.syncToEncryptedArchiveAsync(context)
+        } catch (_: Throwable) {}
+    }
+
     fun refresh(context: Context) {
         try {
             val dir = AppStorageHelper.getMediaImportedDir(context)
-            val files = dir.listFiles()?.filter { file ->
+            val rawFiles = dir.listFiles()?.filter { file ->
                 file.isFile && file.length() > 0 && IMAGE_EXTENSIONS.contains(file.extension.lowercase())
-            }?.sortedByDescending { it.lastModified() } ?: emptyList()
+            } ?: emptyList()
 
-            val list = files.map { file ->
+            val savedOrder = loadSavedOrder(context)
+            val sortedFiles = if (savedOrder.isEmpty()) {
+                rawFiles.sortedByDescending { it.lastModified() }
+            } else {
+                rawFiles.sortedWith { f1, f2 ->
+                    val idx1 = savedOrder.indexOf(f1.name)
+                    val idx2 = savedOrder.indexOf(f2.name)
+                    when {
+                        idx1 != -1 && idx2 != -1 -> idx1.compareTo(idx2)
+                        idx1 != -1 -> -1 // existing ordered files keep priority
+                        idx2 != -1 -> 1
+                        else -> f2.lastModified().compareTo(f1.lastModified())
+                    }
+                }
+            }
+
+            val list = sortedFiles.map { file ->
                 SsiImage(
                     file = file,
                     uri = Uri.fromFile(file),
@@ -50,6 +97,45 @@ object SsiManager {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    /**
+     * Moves an image from one position in the list to another and saves the order persistently.
+     */
+    fun moveImage(context: Context, fromIndex: Int, toIndex: Int): Boolean {
+        val current = _importedImages.value.toMutableList()
+        if (fromIndex in current.indices && toIndex in current.indices && fromIndex != toIndex) {
+            val item = current.removeAt(fromIndex)
+            current.add(toIndex, item)
+            _importedImages.value = current
+            saveOrder(context, current.map { it.name })
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Swaps two images in the list and saves the order persistently.
+     */
+    fun swapImages(context: Context, index1: Int, index2: Int): Boolean {
+        val current = _importedImages.value.toMutableList()
+        if (index1 in current.indices && index2 in current.indices && index1 != index2) {
+            val temp = current[index1]
+            current[index1] = current[index2]
+            current[index2] = temp
+            _importedImages.value = current
+            saveOrder(context, current.map { it.name })
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Replaces the entire image list with a new order and persists it.
+     */
+    fun reorderImages(context: Context, newOrder: List<SsiImage>) {
+        _importedImages.value = newOrder
+        saveOrder(context, newOrder.map { it.name })
     }
 
     suspend fun importImage(
@@ -111,6 +197,7 @@ object SsiManager {
             }
 
             refresh(context)
+            MediaZipEncryptionHelper.syncToEncryptedArchiveAsync(context)
 
             val ssiImage = SsiImage(
                 file = targetFile,
@@ -136,10 +223,12 @@ object SsiManager {
                     count++
                 }
             }
+            File(dir, ORDER_FILE_NAME).delete()
         } catch (e: Exception) {
             e.printStackTrace()
         }
         refresh(context)
+        MediaZipEncryptionHelper.syncToEncryptedArchiveAsync(context)
         return count
     }
 
@@ -149,7 +238,14 @@ object SsiManager {
         } catch (e: Exception) {
             false
         }
+        if (deleted) {
+            val saved = loadSavedOrder(context).filter { it != file.name }
+            saveOrder(context, saved)
+        }
         refresh(context)
+        if (deleted) {
+            MediaZipEncryptionHelper.syncToEncryptedArchiveAsync(context)
+        }
         return deleted
     }
 

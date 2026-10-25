@@ -88,8 +88,8 @@ fun ConnectedPathsDialog(
                     fileCount = countFiles(exVault)
                 ),
                 PathItem(
-                    title = "Vault Containers (.dat)",
-                    description = "Secure encrypted DAT container storage directory",
+                    title = "IMG Vault Containers (.vault)",
+                    description = "Secure encrypted .vault container storage directory",
                     path = vaultContainers.absolutePath,
                     exists = vaultContainers.exists(),
                     fileCount = countFiles(vaultContainers)

@@ -48,6 +48,8 @@ object SettingsManager {
     private const val KEY_SRA_TRANSITION = "key_sra_transition"
     private const val KEY_SSI_INTERVAL = "key_ssi_slideshow_interval"
     private const val KEY_SSI_AUTO_LOOP = "key_ssi_auto_loop"
+    private const val KEY_AUTO_ZIP_MEDIA = "key_auto_zip_media"
+    private const val KEY_DELETE_RAW_MEDIA_AFTER_ZIP = "key_delete_raw_media_after_zip"
     private const val KEY_RNAME_PREFIX = "key_rname_prefix"
     private const val KEY_RNAME_PADDING = "key_rname_padding"
     private const val KEY_RNAME_START_NUM = "key_rname_start_num"
@@ -146,6 +148,8 @@ object SettingsManager {
             sraTransition = p.getString(KEY_SRA_TRANSITION, "fade") ?: "fade",
             ssiSlideshowIntervalSeconds = p.getFloat(KEY_SSI_INTERVAL, 2.0f),
             ssiAutoLoop = p.getBoolean(KEY_SSI_AUTO_LOOP, true),
+            autoZipMediaOnLock = p.getBoolean(KEY_AUTO_ZIP_MEDIA, false),
+            deleteRawMediaAfterZip = p.getBoolean(KEY_DELETE_RAW_MEDIA_AFTER_ZIP, false),
             rnameSequencePrefix = p.getString(KEY_RNAME_PREFIX, "VHot") ?: "VHot",
             rnamePaddingDigits = p.getInt(KEY_RNAME_PADDING, 4),
             rnameStartNumber = p.getInt(KEY_RNAME_START_NUM, 1),
@@ -344,6 +348,17 @@ object SettingsManager {
     fun setSsiAutoLoop(enabled: Boolean) {
         prefs?.edit()?.putBoolean(KEY_SSI_AUTO_LOOP, enabled)?.apply()
         _settings.value = _settings.value.copy(ssiAutoLoop = enabled)
+    }
+
+    // Media Folder ZIP Encryption Settings
+    fun setAutoZipMediaOnLock(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_AUTO_ZIP_MEDIA, enabled)?.apply()
+        _settings.value = _settings.value.copy(autoZipMediaOnLock = enabled)
+    }
+
+    fun setDeleteRawMediaAfterZip(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_DELETE_RAW_MEDIA_AFTER_ZIP, enabled)?.apply()
+        _settings.value = _settings.value.copy(deleteRawMediaAfterZip = enabled)
     }
 
     // Rname Settings

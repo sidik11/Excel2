@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,8 +23,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -31,6 +37,7 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -69,7 +76,8 @@ fun VaultModalViewer(
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onToggleSlideshow: () -> Unit,
-    onTogglePause: () -> Unit
+    onTogglePause: () -> Unit,
+    onImportToSsi: (VaultImage) -> Unit = {}
 ) {
     if (images.isEmpty() || currentIndex !in images.indices) return
 
@@ -77,6 +85,7 @@ fun VaultModalViewer(
     val context = LocalContext.current
     val settings by SettingsManager.settings.collectAsState()
     var totalDrag by remember { mutableFloatStateOf(0f) }
+    var importedCurrent by remember(currentIndex) { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onClose,
@@ -278,31 +287,64 @@ fun VaultModalViewer(
                 )
             }
 
-            // Bottom Navigation Hint & Counter Pill
-            Surface(
-                color = Color.Black.copy(alpha = 0.65f),
-                shape = CircleShape,
+            // Bottom Navigation Hint & Counter + Import to SSI
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 24.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                Surface(
+                    color = Color.Black.copy(alpha = 0.65f),
+                    shape = CircleShape
                 ) {
-                    if (isSlideshowPlaying) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(Color(0xFFFDCB6E), CircleShape)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        if (isSlideshowPlaying) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(Color(0xFFFDCB6E), CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text(
+                            text = "${currentIndex + 1} / ${images.size}",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
                     }
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Button(
+                    onClick = {
+                        importedCurrent = true
+                        onImportToSsi(currentItem)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (importedCurrent) Color(0xFF00B894) else Color(0xFF6C5CE7),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.testTag("vault_import_to_ssi_button")
+                ) {
+                    Icon(
+                        imageVector = if (importedCurrent) Icons.Default.Check else Icons.Default.Download,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "← Swipe or Arrows → (${currentIndex + 1} of ${images.size})",
-                        color = Color.White,
+                        text = if (importedCurrent) "Imported to SSI" else "Import to SSI",
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }

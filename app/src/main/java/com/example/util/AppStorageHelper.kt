@@ -121,22 +121,60 @@ object AppStorageHelper {
     }
 
     /**
-     * Dedicated folder for generated DAT files.
+     * Dedicated folder for IMG Vault (.vault) encrypted containers.
      */
     fun getVaultStorageDir(context: Context): File {
-        val dir = File(getDedicatedMediaDir(context), "Vault_Containers")
+        val dir = File(getDedicatedMediaDir(context), "IMG_Vault")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    fun getImgVaultDir(context: Context): File = getVaultStorageDir(context)
+
+    /**
+     * Dedicated public folder for encrypted archives in Android/media/<packageName>/encrypt.
+     * This is the only folder visible in external file managers for app media,
+     * protecting all user media with the App Lock password.
+     */
+    fun getEncryptedMediaDir(context: Context): File {
+        val dir = File(getDedicatedMediaDir(context), "encrypt")
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
 
     /**
-     * Dedicated folder for SSI (Saved Slideshow Images) in Android/media/<packageName>/media_imported.
-     * All images imported from Excel full screen viewer are persisted here.
+     * The master encrypted ZIP archive containing all app media files.
+     * Standard AES-256 encrypted using the user's 6-digit PIN / App Lock password.
+     */
+    fun getAllMediaEncryptedZipFile(context: Context): File {
+        return File(getEncryptedMediaDir(context), "all_media_encrypted.zip")
+    }
+
+    /**
+     * Active working directory for SSI (Saved Slideshow Images) inside internal sandbox.
+     * Stored in private filesDir so all images render directly inside the app,
+     * completely protected from unauthorized external file manager access.
      */
     fun getMediaImportedDir(context: Context): File {
-        val dir = File(getDedicatedMediaDir(context), "media_imported")
+        val dir = File(context.filesDir, "media_imported")
         if (!dir.exists()) dir.mkdirs()
         return dir
+    }
+
+    /**
+     * Legacy external folder in Android/media/<packageName>/media_imported.
+     * Used for automatic migration of older user data on app update.
+     */
+    fun getLegacyMediaImportedDir(context: Context): File {
+        return File(getDedicatedMediaDir(context), "media_imported")
+    }
+
+    fun getLegacyExVaultDir(context: Context): File {
+        return File(getDedicatedMediaDir(context), "EX_Vault")
+    }
+
+    fun getLegacySShowStoredDir(context: Context): File {
+        return File(getDedicatedMediaDir(context), "SShow_Stored")
     }
 
     /**

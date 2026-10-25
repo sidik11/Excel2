@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.util.SettingsManager
+import com.example.util.SsiHostInfo
+import com.example.util.SsiHostServer
 import com.example.util.SsiImage
 import com.example.util.SsiManager
 import kotlinx.coroutines.Job
@@ -23,13 +25,19 @@ data class SsiUiState(
     val currentSlideshowIndex: Int = 0,
     val showClearDialog: Boolean = false,
     val userMessage: String? = null,
-    val selectedImage: SsiImage? = null
+    val selectedImage: SsiImage? = null,
+    val isRearrangeMode: Boolean = false,
+    val selectedRearrangeIndex: Int? = null,
+    val showHostPinDialog: Boolean = false,
+    val showHostInfoDialog: Boolean = false
 )
 
 class SsiViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(SsiUiState())
     val uiState: StateFlow<SsiUiState> = _uiState.asStateFlow()
+
+    val hostState: StateFlow<SsiHostInfo> = SsiHostServer.hostState
 
     private var slideshowJob: Job? = null
 
@@ -182,12 +190,143 @@ class SsiViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(selectedImage = item) }
     }
 
+    fun enterRearrangeMode(initialIndex: Int? = null) {
+        val list = _uiState.value.images
+        val safeIndex = if (list.isEmpty()) null else (initialIndex ?: 0).coerceIn(0, list.size - 1)
+        _uiState.update {
+            it.copy(
+                isRearrangeMode = true,
+                selectedRearrangeIndex = safeIndex,
+                userMessage = "Rearrange Mode: Tap any position to move, or use arrows to reorder."
+            )
+        }
+    }
+
+    fun exitRearrangeMode() {
+        _uiState.update {
+            it.copy(
+                isRearrangeMode = false,
+                selectedRearrangeIndex = null,
+                userMessage = "Rearrangement saved"
+            )
+        }
+    }
+
+    fun selectRearrangeIndex(index: Int) {
+        val current = _uiState.value
+        val fromIndex = current.selectedRearrangeIndex
+        if (fromIndex != null && fromIndex != index) {
+            // Move item to this tapped position
+            moveImage(fromIndex, index)
+        } else {
+            _uiState.update { it.copy(selectedRearrangeIndex = index) }
+        }
+    }
+
+    fun moveImage(fromIndex: Int, toIndex: Int) {
+        val ok = SsiManager.moveImage(getApplication(), fromIndex, toIndex)
+        if (ok) {
+            _uiState.update { it.copy(selectedRearrangeIndex = toIndex) }
+        }
+    }
+
+    fun swapImages(index1: Int, index2: Int) {
+        val ok = SsiManager.swapImages(getApplication(), index1, index2)
+        if (ok) {
+            _uiState.update { it.copy(selectedRearrangeIndex = index2) }
+        }
+    }
+
+    fun moveSelectedLeft() {
+        val current = _uiState.value
+        val sel = current.selectedRearrangeIndex ?: return
+        if (sel > 0) {
+            moveImage(sel, sel - 1)
+        }
+    }
+
+    fun moveSelectedRight() {
+        val current = _uiState.value
+        val sel = current.selectedRearrangeIndex ?: return
+        if (sel < current.images.size - 1) {
+            moveImage(sel, sel + 1)
+        }
+    }
+
+    fun moveSelectedToStart() {
+        val current = _uiState.value
+        val sel = current.selectedRearrangeIndex ?: return
+        if (sel > 0) {
+            moveImage(sel, 0)
+        }
+    }
+
+    fun moveSelectedToEnd() {
+        val current = _uiState.value
+        val sel = current.selectedRearrangeIndex ?: return
+        if (sel < current.images.size - 1) {
+            moveImage(sel, current.images.size - 1)
+        }
+    }
+
     fun clearUserMessage() {
         _uiState.update { it.copy(userMessage = null) }
+    }
+
+    fun openHostPinDialog() {
+        _uiState.update { it.copy(showHostPinDialog = true) }
+    }
+
+    fun dismissHostPinDialog() {
+        _uiState.update { it.copy(showHostPinDialog = false) }
+    }
+
+    fun confirmStartHost(pin: String) {
+        val cleanPin = pin.trim()
+        if (cleanPin.length != 4 || !cleanPin.all { it.isDigit() }) {
+            _uiState.update { it.copy(userMessage = "PIN must be exactly 4 digits") }
+            return
+        }
+        val ok = SsiHostServer.start(getApplication(), cleanPin)
+        if (ok) {
+            _uiState.update {
+                it.copy(
+                    showHostPinDialog = false,
+                    showHostInfoDialog = true,
+                    userMessage = "Slideshow Host started! PIN set to $cleanPin"
+                )
+            }
+        } else {
+            _uiState.update {
+                it.copy(
+                    showHostPinDialog = false,
+                    userMessage = "Failed to start host server. Check network connection."
+                )
+            }
+        }
+    }
+
+    fun stopHost() {
+        SsiHostServer.stop()
+        _uiState.update {
+            it.copy(
+                showHostInfoDialog = false,
+                userMessage = "Host stopped. All connected devices disconnected."
+            )
+        }
+    }
+
+    fun openHostInfoDialog() {
+        _uiState.update { it.copy(showHostInfoDialog = true) }
+    }
+
+    fun dismissHostInfoDialog() {
+        _uiState.update { it.copy(showHostInfoDialog = false) }
     }
 
     override fun onCleared() {
         super.onCleared()
         stopSlideshow()
+        SsiHostServer.stop()
     }
 }

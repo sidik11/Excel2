@@ -99,22 +99,23 @@ fun DualVaultScreen(
         }
     }
 
-    // Multiple photo picker (batches up to 50 photos)
+    // Multiple photo picker (batches up to 500 photos)
     val multiPhotoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia(50)
+        contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
+            val toProcess = if (uris.size > 500) uris.take(500) else uris
             coroutineScope.launch {
                 isLoading = true
                 var successCount = 0
-                uris.forEachIndexed { index, uri ->
-                    uploadStatusMessage = "Syncing ${index + 1} of ${uris.size} to Dual Vault & Peer..."
+                toProcess.forEachIndexed { index, uri ->
+                    uploadStatusMessage = "Syncing ${index + 1} of ${toProcess.size} to Dual Vault & Peer..."
                     val result = FirebaseBridgeManager.addImageToDualVault(context, uri)
                     if (result.isSuccess) successCount++
                 }
                 isLoading = false
                 uploadStatusMessage = null
-                Toast.makeText(context, "Added and synced $successCount of ${uris.size} photos!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Added and synced $successCount of ${toProcess.size} photos!", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -257,9 +258,7 @@ fun DualVaultScreen(
             ) {
                 Button(
                     onClick = {
-                        multiPhotoPickerLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
+                        multiPhotoPickerLauncher.launch(arrayOf("image/*"))
                     },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(

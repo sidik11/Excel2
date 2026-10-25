@@ -190,7 +190,7 @@ fun MainScreen(
                 onOpenProfile = { showProfileDialog = true }
             )
 
-            // Top Section Switcher (Excel Catalog, DAT Vault, SShow, Settings)
+            // Top Section Switcher (Excel Catalog, IMG Vault, SShow, Settings)
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.fillMaxWidth()
@@ -241,7 +241,7 @@ fun MainScreen(
                             .testTag("nav_image_vault_tab")
                     ) {
                         Text(
-                            text = "🔐 DAT Vault",
+                            text = "🖼️ IMG Vault",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isVault) Color.White else MaterialTheme.colorScheme.onSurfaceVariant

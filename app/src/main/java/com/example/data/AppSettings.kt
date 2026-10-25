@@ -50,6 +50,9 @@ data class AppSettings(
     // SSI (Saved Slideshow Images) Settings
     val ssiSlideshowIntervalSeconds: Float = 2.0f, // 1.0s to 5.0s
     val ssiAutoLoop: Boolean = true,
+    // Media Folder ZIP Encryption Settings
+    val autoZipMediaOnLock: Boolean = false,
+    val deleteRawMediaAfterZip: Boolean = false,
     // Rname (VHot Renamer) Settings
     val rnameSequencePrefix: String = "VHot",
     val rnamePaddingDigits: Int = 4, // 0001

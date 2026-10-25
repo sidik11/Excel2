@@ -277,7 +277,7 @@ fun ChangeMasterPasswordDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Update the master encryption password used to lock/unlock encrypted DAT containers.",
+                    text = "Update the master encryption password used to lock/unlock encrypted IMG Vault containers.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

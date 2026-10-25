@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
@@ -112,6 +113,7 @@ import com.example.ui.profile.ProfileDialog
 import com.example.util.AppSecurityManager
 import com.example.util.AppStorageHelper
 import com.example.util.BiometricAvailability
+import com.example.util.MediaZipEncryptionHelper
 import com.example.util.ProfileManager
 import com.example.util.SettingsManager
 import android.graphics.BitmapFactory
@@ -412,7 +414,7 @@ fun SettingsScreen(
 
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            "Register your fingerprint to create a secure backup containing your profile, connected Google account, and 6-digit password. When placed on another device, all profile info and your 6-digit password are auto-added and enabled.",
+                            "Register your fingerprint to create a secure backup containing your profile, connected Google account, and 6-digit password. When placed on another device, all profile info and your 6-digit password are restored automatically.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -545,7 +547,14 @@ fun SettingsScreen(
                         checked = securityConfig.isAntiScreenshotEnabled,
                         onCheckedChange = { isEnabled ->
                             AppSecurityManager.setAntiScreenshotEnabled(context, isEnabled)
-                            val status = if (isEnabled) "Screen protection enabled (screenshots & recording blocked)." else "Screen protection disabled."
+                            (context as? android.app.Activity)?.window?.let { win ->
+                                if (isEnabled) {
+                                    win.setFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE, android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                                } else {
+                                    win.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                                }
+                            }
+                            val status = if (isEnabled) "Screen protection enabled (screenshots & recording blocked)." else "Screen protection disabled (screenshots allowed)."
                             Toast.makeText(context, status, Toast.LENGTH_SHORT).show()
                         },
                         colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
@@ -562,7 +571,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("DAT Vault Master Password", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("IMG Vault Master Password", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         Text(
                             "Change container encryption password stored in secure storage.",
                             fontSize = 12.sp,
@@ -617,18 +626,18 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // SECTION 1: 🔐 Persistent Vault Session
+        // SECTION 1: 🖼️ IMG Vault Settings & Persistence
         Surface(
             color = MaterialTheme.colorScheme.surface,
             shape = RoundedCornerShape(14.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().testTag("section_img_vault_settings")
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LockOpen, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Vault Persistence & Security", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
+                    Text("🖼️ IMG Vault Settings & Persistence", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.primary)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -638,9 +647,9 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Keep Vault Unlocked Across Reopen", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Keep Vault Open Until Manual Lock", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         Text(
-                            "Reopening the app keeps the vault open until you manually tap 'Lock & Clean'.",
+                            "When IMG Vault is unlocked, it stays unlocked across app tabs until you explicitly tap 'Lock Vault' or 'Lock & Clear'.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -655,55 +664,66 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
 
+                // Compact Vault Container Action
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Auto-Sync EX Vault on Resume", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Compact Active IMG Vault", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         Text(
-                            "Detects new or removed images in EX Vault when returning from file manager.",
+                            "Physically reclaims disk space by purging logically deleted images from .vault containers.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(
-                        checked = settings.autoSyncExVault,
-                        onCheckedChange = { SettingsManager.setAutoSyncExVault(it) },
-                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.testTag("toggle_auto_sync_ex_vault")
-                    )
+                    Button(
+                        onClick = {
+                            Toast.makeText(context, "Open IMG Vault tab and tap 'Compact Vault' icon to reclaim space.", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("btn_settings_compact_vault")
+                    ) {
+                        Text("Compact", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
 
+                // Clear Decrypted Thumbnail Cache
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Auto-Clean EX Vault on Lock", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Wipe Decrypted Thumbnail Cache", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         Text(
-                            "Wipe decrypted images from EX Vault immediately when Lock & Clean is tapped.",
+                            "Purges all temporary cached thumbnails from app internal memory.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(
-                        checked = settings.cleanExVaultOnLock,
-                        onCheckedChange = { SettingsManager.setCleanExVaultOnLock(it) },
-                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.testTag("toggle_clean_ex_on_lock")
-                    )
+                    Button(
+                        onClick = {
+                            com.example.util.ImgVaultEngine.clearDecryptedCache(context)
+                            Toast.makeText(context, "Decrypted thumbnail cache wiped clean.", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("btn_clear_thumb_cache")
+                    ) {
+                        Text("Wipe Cache", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
 
                 Text("Auto-Lock Security Timer:", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 Text(
-                    "Automatically re-lock vault if app is in background for longer than:",
+                    "Automatically re-lock app/vault if inactive in background for longer than:",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1877,6 +1897,61 @@ fun SettingsScreen(
                         Text("Import Directory", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         Text("Images saved from Excel viewer are stored directly in Android/media/<packageName>/media_imported", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Automatic Media Vault Encryption Status Card
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.FolderZip, contentDescription = null, tint = Color(0xFF6C5CE7), modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Auto Media Vault (AES-256)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Surface(
+                                color = Color(0xFF00B894).copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    "Active",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF00B894),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            "All app media is automatically encrypted in Android/media/${context.packageName}/encrypt/all_media_encrypted.zip with your App Lock password. File managers see only the encrypted file; inside the app, all images display normally.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            val res = MediaZipEncryptionHelper.exportZipToPublicDownloads(context)
+                            res.onSuccess { file ->
+                                Toast.makeText(context, "Exported encrypted archive to Downloads: ${file.name}", Toast.LENGTH_LONG).show()
+                            }.onFailure { err ->
+                                Toast.makeText(context, "Export failed: ${err.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().testTag("btn_export_zip_dialog")
+                ) {
+                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Export Encrypted Archive to Downloads", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

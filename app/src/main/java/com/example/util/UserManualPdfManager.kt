@@ -48,7 +48,7 @@ object UserManualPdfManager {
                 "Excel & Image Vault is a dual-purpose mobile workstation engineered for high-security media storage and spreadsheet-driven catalog searching.",
                 "Key Capabilities:",
                 "• Excel Catalog Search: Instant lookup and dynamic image filtering based on Excel data sheets.",
-                "• Encrypted DAT Vault: AES-256 encrypted image containers (.dat) with fixed-size allocation and dummy-padding for deniability.",
+                "• Encrypted IMG Vault: AES-256-GCM encrypted image containers (.vault) with 5GB/10GB limits and low-RAM streaming.",
                 "• Dedicated Storage: Files reside in Android/media to prevent memory bloat and simplify file management.",
                 "• Multi-Layer Security: 6-Digit PIN, Master Password, Android Biometrics, and Anti-Screenshot protection."
             )
@@ -88,15 +88,15 @@ object UserManualPdfManager {
             )
         ),
         ManualSection(
-            title = "5. Encrypted DAT Image Vault",
+            title = "5. Encrypted IMG Vault",
             iconEmoji = "🗄️",
             contents = listOf(
-                "The Image Vault allows you to package sensitive photos into a single encrypted binary container (.dat):",
-                "• Creation: Create a container with custom target size (e.g., 50 MB, 100 MB, 500 MB) padded with uniform 0xAA bytes to conceal file counts.",
-                "• High-Performance Streaming Engine: AES encryption streams in memory-safe 64KB chunks, effortlessly supporting over 1,000 photos without Out-Of-Memory crashes.",
-                "• Image Extraction: Unpack images to a dedicated folder or view photos within the in-app lightbox.",
-                "• Auto-Expansion: When importing images exceeding original capacity, the container safely auto-expands with headroom.",
-                "• Storage Location: Containers are stored in Android/media/com.example/Vault_Containers."
+                "The IMG Vault allows you to package sensitive photos into a single encrypted container (.vault):",
+                "• Creation: Create a container with 5 GB or 10 GB capacity limits, which grows dynamically as images are imported.",
+                "• High-Performance Streaming Engine: AES-256-GCM encryption streams in memory-safe 64KB chunks with low RAM usage.",
+                "• In-App Encrypted Gallery: View, rename, move to folders, delete, and import directly to SSI without extracting plain files.",
+                "• Multi-Select & Compaction: Select multiple photos to batch export or share, and run Compaction to reclaim deleted storage.",
+                "• Storage Location: Containers are stored in Android/media/com.example/IMG_Vault."
             )
         ),
         ManualSection(

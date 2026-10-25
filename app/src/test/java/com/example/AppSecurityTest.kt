@@ -6,6 +6,7 @@ import com.example.util.AppSecurityManager
 import com.example.util.AppStorageHelper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -256,5 +257,152 @@ class AppSecurityTest {
         // 4. Verifying the 6-digit password "654321" succeeds on the new device!
         assertTrue("Entering restored 6-digit password should succeed", AppSecurityManager.verifyPin(targetPin, context))
         assertFalse("Entering wrong PIN should fail", AppSecurityManager.verifyPin("000000", context))
+    }
+
+    @Test
+    fun testFingerprintDatContainsOnlyCredentialsAndNoMediaZip() {
+        // Step 1: Ensure profile and PIN exist
+        val testProfile = com.example.data.local.UserProfile(
+            fullName = "Bob Builder",
+            dateOfBirth = "01-01-1990",
+            phoneNumber = "+1 555-9876",
+            emailId = "bob@example.com",
+            device = "Pixel 8",
+            village = "Austin",
+            district = "Travis",
+            state = "Texas",
+            country = "USA",
+            pincode = "78701",
+            profileImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            googleEmail = "bob.builder@gmail.com",
+            googleDisplayName = "Bob Builder",
+            googleId = "google_id_bob",
+            isGoogleConnected = true
+        )
+        com.example.util.ProfileManager.saveProfile(context, testProfile)
+        val testPin = "112233"
+        AppSecurityManager.set6DigitPin(context, testPin)
+
+        // Step 2: Register fingerprint, generating fingerprint.dat
+        val (regOk, _) = AppSecurityManager.registerFingerprintCredential(context)
+        assertTrue("Registration should succeed", regOk)
+
+        val fpDir = AppStorageHelper.getFingerprintDir(context)
+        val datFile = File(fpDir, "fingerprint.dat")
+        assertTrue("fingerprint.dat must exist", datFile.exists())
+
+        val datContent = datFile.readText()
+
+        // 1. Security & App Lock Credentials
+        assertTrue("fingerprint.dat must contain PIN_CODE", datContent.contains("PIN_CODE=112233"))
+        assertTrue("fingerprint.dat must contain PIN_PASSWORD", datContent.contains("PIN_PASSWORD=112233"))
+        assertTrue("fingerprint.dat must contain PIN_SALT", datContent.contains("PIN_SALT="))
+        assertTrue("fingerprint.dat must contain PIN_HASH", datContent.contains("PIN_HASH="))
+        assertTrue("fingerprint.dat must contain PIN_ENABLED", datContent.contains("PIN_ENABLED=true"))
+        assertTrue("fingerprint.dat must contain TOKEN", datContent.contains("TOKEN="))
+        assertTrue("fingerprint.dat must contain SALT", datContent.contains("SALT="))
+        assertTrue("fingerprint.dat must contain HASH", datContent.contains("HASH="))
+        assertTrue("fingerprint.dat must contain REGISTERED_AT", datContent.contains("REGISTERED_AT="))
+        assertTrue("fingerprint.dat must contain DEVICE", datContent.contains("DEVICE="))
+        assertTrue("fingerprint.dat must contain PACKAGE", datContent.contains("PACKAGE="))
+
+        // 2. User Profile & Connected Accounts
+        assertTrue("fingerprint.dat must contain GOOGLE_EMAIL", datContent.contains("GOOGLE_EMAIL=bob.builder@gmail.com"))
+        assertTrue("fingerprint.dat must contain GOOGLE_NAME", datContent.contains("GOOGLE_NAME=Bob Builder"))
+        assertTrue("fingerprint.dat must contain GOOGLE_ID", datContent.contains("GOOGLE_ID=google_id_bob"))
+        assertTrue("fingerprint.dat must contain GOOGLE_CONNECTED", datContent.contains("GOOGLE_CONNECTED=true"))
+        assertTrue("fingerprint.dat must contain PROFILE_JSON", datContent.contains("PROFILE_JSON="))
+        assertTrue("fingerprint.dat must contain DEVICE_CODE", datContent.contains("DEVICE_CODE="))
+
+        // 3. Biometrics & Privacy Settings
+        assertTrue("fingerprint.dat must contain FACE_LOCK_ENABLED", datContent.contains("FACE_LOCK_ENABLED="))
+        assertTrue("fingerprint.dat must contain IS_FACE_ENROLLED", datContent.contains("IS_FACE_ENROLLED="))
+        assertTrue("fingerprint.dat must contain FACE_ENROLLED_AT", datContent.contains("FACE_ENROLLED_AT="))
+        assertTrue("fingerprint.dat must contain RECENT_APP_PRIVACY", datContent.contains("RECENT_APP_PRIVACY="))
+        assertTrue("fingerprint.dat must contain FB_CONNECTED", datContent.contains("FB_CONNECTED="))
+        assertTrue("fingerprint.dat must contain FB_USERNAME", datContent.contains("FB_USERNAME="))
+
+        // 4. Must NOT contain Media ZIP in fingerprint.dat
+        assertFalse("fingerprint.dat must NOT contain MEDIA_ZIP_NAME", datContent.contains("MEDIA_ZIP_NAME="))
+        assertFalse("fingerprint.dat must NOT contain MEDIA_ZIP_SIZE", datContent.contains("MEDIA_ZIP_SIZE="))
+        assertFalse("fingerprint.dat must NOT contain MEDIA_ZIP_BASE64", datContent.contains("MEDIA_ZIP_BASE64="))
+
+        // Step 3: Restore on new device using fingerprint.dat content
+        val (unlockOk, msg) = AppSecurityManager.verifyAndUnlockWithBackupFingerprintContent(context, datContent)
+        assertTrue("Restoration and unlock should succeed: $msg", unlockOk)
+
+        // Verify profile and PIN are restored
+        val restoredProfile = com.example.util.ProfileManager.userProfile.value
+        assertNotNull("Restored profile must not be null", restoredProfile)
+        assertEquals("Bob Builder", restoredProfile?.fullName)
+        assertEquals("bob.builder@gmail.com", restoredProfile?.googleEmail)
+        assertTrue("PIN verification should succeed", AppSecurityManager.verifyPin(testPin, context))
+    }
+
+    @Test
+    fun testAutoMigrationOfLegacyMediaAndForeverEncryption() {
+        val testPin = "987654"
+        AppSecurityManager.set6DigitPin(context, testPin)
+
+        // Simulate older user having raw unencrypted files in Android/media/<packageName>/media_imported
+        val legacyDir = AppStorageHelper.getLegacyMediaImportedDir(context)
+        legacyDir.mkdirs()
+        val legacyPhoto = File(legacyDir, "legacy_user_photo.jpg")
+        legacyPhoto.writeText("OLD_USER_IMAGE_CONTENT_BEFORE_UPDATE")
+        assertTrue("Legacy photo must exist in public folder before migration", legacyPhoto.exists())
+
+        // Simulate app unlock / update run
+        val migrated = com.example.util.MediaZipEncryptionHelper.autoMigrateAndEncryptAllMedia(context)
+        assertTrue("Auto migration and encryption should succeed", migrated)
+
+        // 1. Loose file in public storage MUST be removed so file managers cannot see it
+        assertFalse("Legacy unencrypted photo must NOT remain exposed in public folder", legacyPhoto.exists())
+
+        // 2. Encrypted folder and all_media_encrypted.zip MUST exist in public folder for file managers
+        val encryptDir = AppStorageHelper.getEncryptedMediaDir(context)
+        assertTrue("encrypt/ folder must exist in public Android/media", encryptDir.exists())
+        val encryptedZip = AppStorageHelper.getAllMediaEncryptedZipFile(context)
+        assertTrue("all_media_encrypted.zip must exist in encrypt/ folder", encryptedZip.exists())
+        assertTrue("all_media_encrypted.zip must have data", encryptedZip.length() > 0L)
+
+        // 3. Inside the app, image MUST exist in internal working directory and be readable
+        val internalPhoto = File(AppStorageHelper.getMediaImportedDir(context), "legacy_user_photo.jpg")
+        assertTrue("Photo must be accessible inside app internal storage", internalPhoto.exists())
+        assertEquals("OLD_USER_IMAGE_CONTENT_BEFORE_UPDATE", internalPhoto.readText())
+
+        // 4. Verifying with correct password decrypts properly
+        val zipArchive = net.lingala.zip4j.ZipFile(encryptedZip, testPin.toCharArray())
+        assertTrue("Encrypted archive must be valid", zipArchive.isValidZipFile)
+    }
+
+    @Test
+    fun testSsiImageRearrangeAndOrderPersistence() {
+        val mediaDir = AppStorageHelper.getMediaImportedDir(context)
+        mediaDir.mkdirs()
+        val fileA = File(mediaDir, "img_a.jpg")
+        val fileB = File(mediaDir, "img_b.jpg")
+        val fileC = File(mediaDir, "img_c.jpg")
+        fileA.writeText("IMG_A")
+        fileB.writeText("IMG_B")
+        fileC.writeText("IMG_C")
+
+        com.example.util.SsiManager.refresh(context)
+        val initialList = com.example.util.SsiManager.importedImages.value
+        assertTrue("Must have at least 3 images", initialList.size >= 3)
+
+        val initialFirstName = initialList[0].name
+        val initialLastName = initialList.last().name
+
+        // Move item at index 0 to last position
+        val moveOk = com.example.util.SsiManager.moveImage(context, 0, initialList.size - 1)
+        assertTrue("Move should succeed", moveOk)
+
+        val updatedList = com.example.util.SsiManager.importedImages.value
+        assertEquals("Initial first item should now be at end", initialFirstName, updatedList.last().name)
+
+        // Verify refresh retains custom persistent order
+        com.example.util.SsiManager.refresh(context)
+        val refreshedList = com.example.util.SsiManager.importedImages.value
+        assertEquals("Refreshed list must preserve custom order", initialFirstName, refreshedList.last().name)
     }
 }

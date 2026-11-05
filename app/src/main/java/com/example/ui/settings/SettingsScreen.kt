@@ -56,6 +56,16 @@ import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.NoteAlt
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Vibration
@@ -1042,6 +1052,78 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
+                // Flip-to-Panic (Face-Down Emergency Lock)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Flip to Panic (Face-Down Lock)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                            ) {
+                                Text("SENSOR", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                            }
+                        }
+                        Text(
+                            "Turn device screen-down on table or surface to immediately lock app and trigger Panic wallpaper disguise.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.flipToPanicEnabled,
+                        onCheckedChange = {
+                            SettingsManager.setFlipToPanicEnabled(it)
+                            Toast.makeText(context, if (it) "Flip-to-Panic enabled (Place face-down to lock)" else "Flip-to-Panic disabled", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.testTag("toggle_flip_to_panic")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+
+                // Speedy Volume Button Panic Trigger
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Speedy Volume Button Panic", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFFF59E0B).copy(alpha = 0.18f)
+                            ) {
+                                Text("SPEEDY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD97706), modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                            }
+                        }
+                        Text(
+                            "Rapidly click volume buttons twice within 650ms to instantly activate Panic wallpaper disguise.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.volumeButtonPanicEnabled,
+                        onCheckedChange = {
+                            SettingsManager.setVolumeButtonPanicEnabled(it)
+                            Toast.makeText(context, if (it) "Volume button panic trigger active" else "Volume button panic trigger disabled", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.testTag("toggle_volume_button_panic")
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
                 Spacer(modifier = Modifier.height(10.dp))
@@ -1901,6 +1983,79 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
 
+                // 🌐 SSI Web Host Bandwidth & Stream Quality
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Wifi, contentDescription = null, tint = AccentGreen, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("SSI Web Host Bandwidth / Stream Quality", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        }
+                        Surface(
+                            color = AccentGreen.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                when (settings.ssiStreamQuality) {
+                                    "ULTRA_FAST" -> "Ultra Fast"
+                                    "BALANCED" -> "Balanced"
+                                    else -> "Original"
+                                },
+                                color = AccentGreen,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Controls compression & resolution when streaming images to remote browser clients:",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(
+                            Triple("ULTRA_FAST", "Ultra Fast", "WebP 70%"),
+                            Triple("BALANCED", "Balanced", "WebP 85%"),
+                            Triple("ORIGINAL", "Original", "Raw Bytes")
+                        ).forEach { (mode, title, desc) ->
+                            val isSel = settings.ssiStreamQuality == mode
+                            FilterChip(
+                                selected = isSel,
+                                onClick = {
+                                    SettingsManager.setSsiStreamQuality(mode)
+                                    Toast.makeText(context, "Streaming quality: $title", Toast.LENGTH_SHORT).show()
+                                },
+                                label = {
+                                    Column(
+                                        modifier = Modifier.padding(vertical = 3.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(title, fontSize = 11.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal)
+                                        Text(desc, fontSize = 9.sp, color = if (isSel) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AccentGreen,
+                                    selectedLabelColor = Color.White
+                                ),
+                                modifier = Modifier.weight(1f).testTag("chip_ssi_quality_${mode.lowercase()}")
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
                 // Automatic Media Vault Encryption Status Card
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2298,27 +2453,119 @@ fun SettingsScreen(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Launcher Icon Disguise & Custom Icon", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Text(
-                            "Disguise app as Excel, Calculator, Notes, etc. or set custom photo icon.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                // Launcher Disguise Preset Catalog
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Launcher Disguise Preset Catalog", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(
+                                "Instantly switch launcher disguise preset or set custom icon photo:",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                        ) {
+                            Text(
+                                "Active: ${settings.launcherDisguiseName}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
                     }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Horizontal Preset Catalog
+                    val catalogPresets = listOf(
+                        Triple("EXCEL", "Excel", Icons.Default.GridOn),
+                        Triple("CALCULATOR", "Calculator", Icons.Default.Calculate),
+                        Triple("NOTES", "Notes", Icons.Default.NoteAlt),
+                        Triple("WEATHER", "Weather", Icons.Default.Cloud),
+                        Triple("CLOCK", "Clock", Icons.Default.Schedule),
+                        Triple("COMPASS", "Compass", Icons.Default.Explore),
+                        Triple("MUSIC", "Music", Icons.Default.MusicNote)
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(catalogPresets) { (presetKey, displayName, iconVec) ->
+                            val isSelected = settings.launcherDisguisePreset.equals(presetKey, ignoreCase = true) ||
+                                    settings.launcherDisguiseName.equals(displayName, ignoreCase = true)
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                ),
+                                modifier = Modifier
+                                    .clickable {
+                                        try {
+                                            val file = AppStorageHelper.getAppLogoFile(context)
+                                            if (file.exists()) file.delete()
+                                            SettingsManager.setCustomAppLogoTimestamp(System.currentTimeMillis())
+                                            SettingsManager.setLauncherDisguise(displayName)
+                                            SettingsManager.setLauncherDisguisePreset(presetKey)
+                                            SettingsManager.setLauncherCustomIconUri("")
+                                            Toast.makeText(context, "Disguise preset activated: $displayName", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Throwable) {
+                                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                    .testTag("catalog_preset_${presetKey.lowercase()}")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = iconVec,
+                                        contentDescription = null,
+                                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = displayName,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (isSelected) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     OutlinedButton(
                         onClick = { showLogoDialog = true },
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.testTag("btn_settings_change_logo")
+                        modifier = Modifier.fillMaxWidth().testTag("btn_settings_change_logo")
                     ) {
                         Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Disguise / Icon", fontSize = 12.sp)
+                        Text("Open Full Catalog & Custom Photo Editor", fontSize = 12.sp)
                     }
                 }
 

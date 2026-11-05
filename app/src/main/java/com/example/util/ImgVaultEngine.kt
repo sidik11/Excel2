@@ -856,6 +856,38 @@ object ImgVaultEngine {
     }
 
     /**
+     * Copies images to a specified folder inside the vault.
+     */
+    suspend fun copyImages(
+        vaultFile: File,
+        masterKey: SecretKeySpec,
+        recordIds: Set<String>,
+        targetFolderId: String?
+    ): ImgVaultResult<ImgVaultMetadata> = withContext(Dispatchers.IO) {
+        try {
+            val current = readMetadataDirect(vaultFile, masterKey)
+                ?: return@withContext ImgVaultResult.Error("Could not read vault index.")
+            val copiedRecords = current.records.filter { recordIds.contains(it.id) }.map { rec ->
+                rec.copy(
+                    id = java.util.UUID.randomUUID().toString(),
+                    folderId = targetFolderId,
+                    name = if (rec.folderId == targetFolderId) "Copy_${rec.name}" else rec.name,
+                    createdAt = System.currentTimeMillis()
+                )
+            }
+            val updated = current.copy(
+                records = current.records + copiedRecords,
+                updatedAt = System.currentTimeMillis()
+            )
+            writeIndexOnly(vaultFile, masterKey, updated)
+            ImgVaultResult.Success(updated)
+        } catch (e: Throwable) {
+            ImgVaultResult.Error("Failed to copy: ${e.message}", e)
+        }
+    }
+
+
+    /**
      * Creates a new folder inside the vault.
      */
     suspend fun createFolder(

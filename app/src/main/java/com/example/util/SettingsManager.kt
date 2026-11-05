@@ -7,6 +7,7 @@ import com.example.data.AppTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONObject
 
 object SettingsManager {
     private const val PREFS_NAME = "app_settings_prefs"
@@ -60,6 +61,10 @@ object SettingsManager {
     private const val KEY_DEFAULT_START_TAB = "key_default_start_tab"
     private const val KEY_HQ_RENDERING = "key_hq_rendering"
     private const val KEY_SHOW_STORAGE_HEADER = "key_show_storage_header"
+    private const val KEY_FLIP_TO_PANIC = "key_flip_to_panic"
+    private const val KEY_VOLUME_BUTTON_PANIC = "key_volume_button_panic"
+    private const val KEY_LAUNCHER_PRESET = "key_launcher_preset"
+    private const val KEY_SSI_STREAM_QUALITY = "key_ssi_stream_quality"
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -159,7 +164,11 @@ object SettingsManager {
             uiAnimationSpeed = p.getString(KEY_UI_ANIM_SPEED, "NORMAL") ?: "NORMAL",
             defaultStartTab = p.getString(KEY_DEFAULT_START_TAB, "EXCEL") ?: "EXCEL",
             highQualityRendering = p.getBoolean(KEY_HQ_RENDERING, true),
-            showStorageStatsHeader = p.getBoolean(KEY_SHOW_STORAGE_HEADER, true)
+            showStorageStatsHeader = p.getBoolean(KEY_SHOW_STORAGE_HEADER, true),
+            flipToPanicEnabled = p.getBoolean(KEY_FLIP_TO_PANIC, true),
+            volumeButtonPanicEnabled = p.getBoolean(KEY_VOLUME_BUTTON_PANIC, true),
+            launcherDisguisePreset = p.getString(KEY_LAUNCHER_PRESET, "EXCEL") ?: "EXCEL",
+            ssiStreamQuality = p.getString(KEY_SSI_STREAM_QUALITY, "ULTRA_FAST") ?: "ULTRA_FAST"
         )
     }
 
@@ -411,5 +420,223 @@ object SettingsManager {
     fun setShowStorageStatsHeader(enabled: Boolean) {
         prefs?.edit()?.putBoolean(KEY_SHOW_STORAGE_HEADER, enabled)?.apply()
         _settings.value = _settings.value.copy(showStorageStatsHeader = enabled)
+    }
+
+    fun setFlipToPanicEnabled(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_FLIP_TO_PANIC, enabled)?.apply()
+        _settings.value = _settings.value.copy(flipToPanicEnabled = enabled)
+    }
+
+    fun setVolumeButtonPanicEnabled(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_VOLUME_BUTTON_PANIC, enabled)?.apply()
+        _settings.value = _settings.value.copy(volumeButtonPanicEnabled = enabled)
+    }
+
+    fun setLauncherDisguisePreset(preset: String) {
+        prefs?.edit()?.putString(KEY_LAUNCHER_PRESET, preset)?.apply()
+        _settings.value = _settings.value.copy(launcherDisguisePreset = preset)
+    }
+
+    fun setSsiStreamQuality(quality: String) {
+        prefs?.edit()?.putString(KEY_SSI_STREAM_QUALITY, quality)?.apply()
+        _settings.value = _settings.value.copy(ssiStreamQuality = quality)
+    }
+
+    /**
+     * Serializes complete settings into a JSON representation for fingerprint.dat backup.
+     */
+    fun settingsToJson(s: AppSettings = _settings.value): JSONObject {
+        return JSONObject().apply {
+            put("theme", s.theme.name)
+            put("isLowRamMode", s.isLowRamMode)
+            put("isDirectFolderAccess", s.isDirectFolderAccess)
+            put("gridColumns", s.gridColumns)
+            put("slideshowSpeedMs", s.slideshowSpeedMs)
+            put("fastForwardSpeedMs", s.fastForwardSpeedMs)
+            put("autoSyncExVault", s.autoSyncExVault)
+            put("keepVaultUnlockedAcrossRestarts", s.keepVaultUnlockedAcrossRestarts)
+            put("useInternalStorageReplaceRam", s.useInternalStorageReplaceRam)
+            put("dedicatedMediaFolderEnabled", s.dedicatedMediaFolderEnabled)
+            put("thumbnailQuality", s.thumbnailQuality)
+            put("slideshowLoop", s.slideshowLoop)
+            put("highContrastBorders", s.highContrastBorders)
+            put("imageFitMode", s.imageFitMode)
+            put("autoLockTimeoutMinutes", s.autoLockTimeoutMinutes)
+            put("showFileInfoOverlay", s.showFileInfoOverlay)
+            put("hapticFeedback", s.hapticFeedback)
+            put("cleanExVaultOnLock", s.cleanExVaultOnLock)
+            put("slideshowTransition", s.slideshowTransition)
+            put("recentAppPrivacy", s.recentAppPrivacy)
+            put("customAppLogoTimestamp", s.customAppLogoTimestamp)
+            put("facebookConnected", s.facebookConnected)
+            put("facebookUserName", s.facebookUserName)
+            put("appDownloadUrl", s.appDownloadUrl)
+            put("faceLockEnabled", s.faceLockEnabled)
+            put("shakeToLockEnabled", s.shakeToLockEnabled)
+            put("shakeToLockDurationSeconds", s.shakeToLockDurationSeconds.toDouble())
+            put("panicCustomImageUri", s.panicCustomImageUri)
+            put("dualVaultSlideshowIntervalSeconds", s.dualVaultSlideshowIntervalSeconds)
+            put("launcherDisguiseName", s.launcherDisguiseName)
+            put("launcherCustomIconUri", s.launcherCustomIconUri)
+            put("sraSlideshowIntervalSeconds", s.sraSlideshowIntervalSeconds.toDouble())
+            put("sraAutoLoop", s.sraAutoLoop)
+            put("sraShowNameBadge", s.sraShowNameBadge)
+            put("sraPauseOnTap", s.sraPauseOnTap)
+            put("sraTransition", s.sraTransition)
+            put("ssiSlideshowIntervalSeconds", s.ssiSlideshowIntervalSeconds.toDouble())
+            put("ssiAutoLoop", s.ssiAutoLoop)
+            put("autoZipMediaOnLock", s.autoZipMediaOnLock)
+            put("deleteRawMediaAfterZip", s.deleteRawMediaAfterZip)
+            put("rnameSequencePrefix", s.rnameSequencePrefix)
+            put("rnamePaddingDigits", s.rnamePaddingDigits)
+            put("rnameStartNumber", s.rnameStartNumber)
+            put("rnameConfirmBeforeRename", s.rnameConfirmBeforeRename)
+            put("customAccentColor", s.customAccentColor)
+            put("galleryGridDensity", s.galleryGridDensity)
+            put("uiAnimationSpeed", s.uiAnimationSpeed)
+            put("defaultStartTab", s.defaultStartTab)
+            put("highQualityRendering", s.highQualityRendering)
+            put("showStorageStatsHeader", s.showStorageStatsHeader)
+            put("flipToPanicEnabled", s.flipToPanicEnabled)
+            put("volumeButtonPanicEnabled", s.volumeButtonPanicEnabled)
+            put("launcherDisguisePreset", s.launcherDisguisePreset)
+            put("ssiStreamQuality", s.ssiStreamQuality)
+        }
+    }
+
+    /**
+     * Restores all settings from a JSONObject (e.g. from fingerprint.dat).
+     */
+    fun restoreSettingsFromJson(json: JSONObject) {
+        val p = prefs ?: return
+        val editor = p.edit()
+
+        if (json.has("theme")) {
+            val themeName = json.optString("theme", _settings.value.theme.name)
+            val theme = try { AppTheme.valueOf(themeName) } catch (_: Throwable) { _settings.value.theme }
+            editor.putString(KEY_THEME, theme.name)
+        }
+        if (json.has("isLowRamMode")) editor.putBoolean(KEY_LOW_RAM, json.optBoolean("isLowRamMode", true))
+        if (json.has("isDirectFolderAccess")) editor.putBoolean(KEY_DIRECT_FOLDER, json.optBoolean("isDirectFolderAccess", true))
+        if (json.has("gridColumns")) editor.putInt(KEY_GRID_COLUMNS, json.optInt("gridColumns", 3))
+        if (json.has("slideshowSpeedMs")) editor.putLong(KEY_SLIDESHOW_SPEED, json.optLong("slideshowSpeedMs", 1500L))
+        if (json.has("fastForwardSpeedMs")) editor.putLong(KEY_FAST_FORWARD_SPEED, json.optLong("fastForwardSpeedMs", 300L))
+        if (json.has("autoSyncExVault")) editor.putBoolean(KEY_AUTO_SYNC_EX, json.optBoolean("autoSyncExVault", true))
+        if (json.has("keepVaultUnlockedAcrossRestarts")) editor.putBoolean(KEY_KEEP_VAULT_OPEN, json.optBoolean("keepVaultUnlockedAcrossRestarts", true))
+        if (json.has("useInternalStorageReplaceRam")) editor.putBoolean(KEY_INTERNAL_STORAGE_RAM, json.optBoolean("useInternalStorageReplaceRam", true))
+        if (json.has("dedicatedMediaFolderEnabled")) editor.putBoolean(KEY_DEDICATED_FOLDER, json.optBoolean("dedicatedMediaFolderEnabled", true))
+        if (json.has("thumbnailQuality")) editor.putString(KEY_THUMBNAIL_QUALITY, json.optString("thumbnailQuality", "medium"))
+        if (json.has("slideshowLoop")) editor.putBoolean(KEY_SLIDESHOW_LOOP, json.optBoolean("slideshowLoop", true))
+        if (json.has("highContrastBorders")) editor.putBoolean(KEY_HIGH_CONTRAST, json.optBoolean("highContrastBorders", true))
+        if (json.has("imageFitMode")) editor.putString(KEY_IMAGE_FIT_MODE, json.optString("imageFitMode", "fit"))
+        if (json.has("autoLockTimeoutMinutes")) editor.putInt(KEY_AUTO_LOCK_TIMEOUT, json.optInt("autoLockTimeoutMinutes", 0))
+        if (json.has("showFileInfoOverlay")) editor.putBoolean(KEY_SHOW_FILE_INFO, json.optBoolean("showFileInfoOverlay", true))
+        if (json.has("hapticFeedback")) editor.putBoolean(KEY_HAPTIC_FEEDBACK, json.optBoolean("hapticFeedback", true))
+        if (json.has("cleanExVaultOnLock")) editor.putBoolean(KEY_CLEAN_EX_ON_LOCK, json.optBoolean("cleanExVaultOnLock", true))
+        if (json.has("slideshowTransition")) editor.putString(KEY_SLIDESHOW_TRANSITION, json.optString("slideshowTransition", "fade"))
+        if (json.has("recentAppPrivacy")) editor.putBoolean(KEY_RECENT_APP_PRIVACY, json.optBoolean("recentAppPrivacy", true))
+        if (json.has("facebookConnected")) editor.putBoolean(KEY_FB_CONNECTED, json.optBoolean("facebookConnected", false))
+        if (json.has("facebookUserName")) editor.putString(KEY_FB_USERNAME, json.optString("facebookUserName", ""))
+        if (json.has("appDownloadUrl")) editor.putString(KEY_APP_DOWNLOAD_URL, json.optString("appDownloadUrl", ""))
+        if (json.has("faceLockEnabled")) editor.putBoolean(KEY_FACE_LOCK_ENABLED, json.optBoolean("faceLockEnabled", false))
+        if (json.has("shakeToLockEnabled")) editor.putBoolean(KEY_SHAKE_TO_LOCK, json.optBoolean("shakeToLockEnabled", false))
+        if (json.has("shakeToLockDurationSeconds")) editor.putFloat(KEY_SHAKE_DURATION, json.optDouble("shakeToLockDurationSeconds", 1.5).toFloat())
+        if (json.has("panicCustomImageUri")) editor.putString(KEY_PANIC_CUSTOM_IMAGE, json.optString("panicCustomImageUri", ""))
+        if (json.has("dualVaultSlideshowIntervalSeconds")) editor.putInt(KEY_DUAL_VAULT_SLIDESHOW_INTERVAL, json.optInt("dualVaultSlideshowIntervalSeconds", 3))
+        if (json.has("launcherDisguiseName")) editor.putString(KEY_LAUNCHER_DISGUISE, json.optString("launcherDisguiseName", "Excel"))
+        if (json.has("launcherCustomIconUri")) editor.putString(KEY_LAUNCHER_CUSTOM_ICON_URI, json.optString("launcherCustomIconUri", ""))
+        if (json.has("sraSlideshowIntervalSeconds")) editor.putFloat(KEY_SRA_INTERVAL, json.optDouble("sraSlideshowIntervalSeconds", 2.0).toFloat())
+        if (json.has("sraAutoLoop")) editor.putBoolean(KEY_SRA_AUTO_LOOP, json.optBoolean("sraAutoLoop", true))
+        if (json.has("sraShowNameBadge")) editor.putBoolean(KEY_SRA_SHOW_NAME_BADGE, json.optBoolean("sraShowNameBadge", true))
+        if (json.has("sraPauseOnTap")) editor.putBoolean(KEY_SRA_PAUSE_ON_TAP, json.optBoolean("sraPauseOnTap", true))
+        if (json.has("sraTransition")) editor.putString(KEY_SRA_TRANSITION, json.optString("sraTransition", "fade"))
+        if (json.has("ssiSlideshowIntervalSeconds")) editor.putFloat(KEY_SSI_INTERVAL, json.optDouble("ssiSlideshowIntervalSeconds", 2.0).toFloat())
+        if (json.has("ssiAutoLoop")) editor.putBoolean(KEY_SSI_AUTO_LOOP, json.optBoolean("ssiAutoLoop", true))
+        if (json.has("autoZipMediaOnLock")) editor.putBoolean(KEY_AUTO_ZIP_MEDIA, json.optBoolean("autoZipMediaOnLock", false))
+        if (json.has("deleteRawMediaAfterZip")) editor.putBoolean(KEY_DELETE_RAW_MEDIA_AFTER_ZIP, json.optBoolean("deleteRawMediaAfterZip", false))
+        if (json.has("rnameSequencePrefix")) editor.putString(KEY_RNAME_PREFIX, json.optString("rnameSequencePrefix", "VHot"))
+        if (json.has("rnamePaddingDigits")) editor.putInt(KEY_RNAME_PADDING, json.optInt("rnamePaddingDigits", 4))
+        if (json.has("rnameStartNumber")) editor.putInt(KEY_RNAME_START_NUM, json.optInt("rnameStartNumber", 1))
+        if (json.has("rnameConfirmBeforeRename")) editor.putBoolean(KEY_RNAME_CONFIRM, json.optBoolean("rnameConfirmBeforeRename", true))
+        if (json.has("customAccentColor")) editor.putString(KEY_CUSTOM_ACCENT_COLOR, json.optString("customAccentColor", "DEFAULT"))
+        if (json.has("galleryGridDensity")) editor.putString(KEY_GRID_DENSITY, json.optString("galleryGridDensity", "STANDARD"))
+        if (json.has("uiAnimationSpeed")) editor.putString(KEY_UI_ANIM_SPEED, json.optString("uiAnimationSpeed", "NORMAL"))
+        if (json.has("defaultStartTab")) editor.putString(KEY_DEFAULT_START_TAB, json.optString("defaultStartTab", "EXCEL"))
+        if (json.has("highQualityRendering")) editor.putBoolean(KEY_HQ_RENDERING, json.optBoolean("highQualityRendering", true))
+        if (json.has("showStorageStatsHeader")) editor.putBoolean(KEY_SHOW_STORAGE_HEADER, json.optBoolean("showStorageStatsHeader", true))
+        if (json.has("flipToPanicEnabled")) editor.putBoolean(KEY_FLIP_TO_PANIC, json.optBoolean("flipToPanicEnabled", true))
+        if (json.has("volumeButtonPanicEnabled")) editor.putBoolean(KEY_VOLUME_BUTTON_PANIC, json.optBoolean("volumeButtonPanicEnabled", true))
+        if (json.has("launcherDisguisePreset")) editor.putString(KEY_LAUNCHER_PRESET, json.optString("launcherDisguisePreset", "EXCEL"))
+        if (json.has("ssiStreamQuality")) editor.putString(KEY_SSI_STREAM_QUALITY, json.optString("ssiStreamQuality", "ULTRA_FAST"))
+
+        editor.apply()
+        loadSettings()
+    }
+
+    /**
+     * Restores settings from key-value pairs parsed from fingerprint.dat lines.
+     */
+    fun restoreSettingsFromKeyValues(props: Map<String, String>) {
+        val p = prefs ?: return
+        val editor = p.edit()
+
+        props["APP_THEME"]?.let {
+            try { editor.putString(KEY_THEME, AppTheme.valueOf(it).name) } catch (_: Throwable) {}
+        }
+        props["LOW_RAM_MODE"]?.let { editor.putBoolean(KEY_LOW_RAM, it.toBoolean()) }
+        props["DIRECT_FOLDER_ACCESS"]?.let { editor.putBoolean(KEY_DIRECT_FOLDER, it.toBoolean()) }
+        props["GRID_COLUMNS"]?.toIntOrNull()?.let { editor.putInt(KEY_GRID_COLUMNS, it) }
+        props["SLIDESHOW_SPEED_MS"]?.toLongOrNull()?.let { editor.putLong(KEY_SLIDESHOW_SPEED, it) }
+        props["FAST_FORWARD_SPEED_MS"]?.toLongOrNull()?.let { editor.putLong(KEY_FAST_FORWARD_SPEED, it) }
+        props["AUTO_SYNC_EX_VAULT"]?.let { editor.putBoolean(KEY_AUTO_SYNC_EX, it.toBoolean()) }
+        props["KEEP_VAULT_OPEN"]?.let { editor.putBoolean(KEY_KEEP_VAULT_OPEN, it.toBoolean()) }
+        props["USE_INTERNAL_STORAGE_RAM"]?.let { editor.putBoolean(KEY_INTERNAL_STORAGE_RAM, it.toBoolean()) }
+        props["DEDICATED_MEDIA_FOLDER"]?.let { editor.putBoolean(KEY_DEDICATED_FOLDER, it.toBoolean()) }
+        props["THUMBNAIL_QUALITY"]?.let { editor.putString(KEY_THUMBNAIL_QUALITY, it) }
+        props["SLIDESHOW_LOOP"]?.let { editor.putBoolean(KEY_SLIDESHOW_LOOP, it.toBoolean()) }
+        props["HIGH_CONTRAST_BORDERS"]?.let { editor.putBoolean(KEY_HIGH_CONTRAST, it.toBoolean()) }
+        props["IMAGE_FIT_MODE"]?.let { editor.putString(KEY_IMAGE_FIT_MODE, it) }
+        props["AUTO_LOCK_TIMEOUT_MINUTES"]?.toIntOrNull()?.let { editor.putInt(KEY_AUTO_LOCK_TIMEOUT, it) }
+        props["SHOW_FILE_INFO_OVERLAY"]?.let { editor.putBoolean(KEY_SHOW_FILE_INFO, it.toBoolean()) }
+        props["HAPTIC_FEEDBACK"]?.let { editor.putBoolean(KEY_HAPTIC_FEEDBACK, it.toBoolean()) }
+        props["CLEAN_EX_ON_LOCK"]?.let { editor.putBoolean(KEY_CLEAN_EX_ON_LOCK, it.toBoolean()) }
+        props["SLIDESHOW_TRANSITION"]?.let { editor.putString(KEY_SLIDESHOW_TRANSITION, it) }
+        props["RECENT_APP_PRIVACY"]?.let { editor.putBoolean(KEY_RECENT_APP_PRIVACY, it.toBoolean()) }
+        props["FB_CONNECTED"]?.let { editor.putBoolean(KEY_FB_CONNECTED, it.toBoolean()) }
+        props["FB_USERNAME"]?.let { editor.putString(KEY_FB_USERNAME, it) }
+        props["APP_DOWNLOAD_URL"]?.let { editor.putString(KEY_APP_DOWNLOAD_URL, it) }
+        props["FACE_LOCK_ENABLED"]?.let { editor.putBoolean(KEY_FACE_LOCK_ENABLED, it.toBoolean()) }
+        props["SHAKE_TO_LOCK_ENABLED"]?.let { editor.putBoolean(KEY_SHAKE_TO_LOCK, it.toBoolean()) }
+        props["SHAKE_TO_LOCK_DURATION"]?.toFloatOrNull()?.let { editor.putFloat(KEY_SHAKE_DURATION, it) }
+        props["PANIC_CUSTOM_IMAGE_URI"]?.let { editor.putString(KEY_PANIC_CUSTOM_IMAGE, it) }
+        props["DUAL_VAULT_INTERVAL"]?.toIntOrNull()?.let { editor.putInt(KEY_DUAL_VAULT_SLIDESHOW_INTERVAL, it) }
+        props["LAUNCHER_DISGUISE_NAME"]?.let { editor.putString(KEY_LAUNCHER_DISGUISE, it) }
+        props["LAUNCHER_CUSTOM_ICON_URI"]?.let { editor.putString(KEY_LAUNCHER_CUSTOM_ICON_URI, it) }
+        props["SRA_INTERVAL"]?.toFloatOrNull()?.let { editor.putFloat(KEY_SRA_INTERVAL, it) }
+        props["SRA_AUTO_LOOP"]?.let { editor.putBoolean(KEY_SRA_AUTO_LOOP, it.toBoolean()) }
+        props["SRA_SHOW_NAME_BADGE"]?.let { editor.putBoolean(KEY_SRA_SHOW_NAME_BADGE, it.toBoolean()) }
+        props["SRA_PAUSE_ON_TAP"]?.let { editor.putBoolean(KEY_SRA_PAUSE_ON_TAP, it.toBoolean()) }
+        props["SRA_TRANSITION"]?.let { editor.putString(KEY_SRA_TRANSITION, it) }
+        props["SSI_INTERVAL"]?.toFloatOrNull()?.let { editor.putFloat(KEY_SSI_INTERVAL, it) }
+        props["SSI_AUTO_LOOP"]?.let { editor.putBoolean(KEY_SSI_AUTO_LOOP, it.toBoolean()) }
+        props["AUTO_ZIP_MEDIA_ON_LOCK"]?.let { editor.putBoolean(KEY_AUTO_ZIP_MEDIA, it.toBoolean()) }
+        props["DELETE_RAW_MEDIA_AFTER_ZIP"]?.let { editor.putBoolean(KEY_DELETE_RAW_MEDIA_AFTER_ZIP, it.toBoolean()) }
+        props["RNAME_PREFIX"]?.let { editor.putString(KEY_RNAME_PREFIX, it) }
+        props["RNAME_PADDING"]?.toIntOrNull()?.let { editor.putInt(KEY_RNAME_PADDING, it) }
+        props["RNAME_START_NUM"]?.toIntOrNull()?.let { editor.putInt(KEY_RNAME_START_NUM, it) }
+        props["RNAME_CONFIRM"]?.let { editor.putBoolean(KEY_RNAME_CONFIRM, it.toBoolean()) }
+        props["CUSTOM_ACCENT_COLOR"]?.let { editor.putString(KEY_CUSTOM_ACCENT_COLOR, it) }
+        props["GALLERY_GRID_DENSITY"]?.let { editor.putString(KEY_GRID_DENSITY, it) }
+        props["UI_ANIMATION_SPEED"]?.let { editor.putString(KEY_UI_ANIM_SPEED, it) }
+        props["DEFAULT_START_TAB"]?.let { editor.putString(KEY_DEFAULT_START_TAB, it) }
+        props["HIGH_QUALITY_RENDERING"]?.let { editor.putBoolean(KEY_HQ_RENDERING, it.toBoolean()) }
+        props["SHOW_STORAGE_HEADER"]?.let { editor.putBoolean(KEY_SHOW_STORAGE_HEADER, it.toBoolean()) }
+        props["FLIP_TO_PANIC_ENABLED"]?.let { editor.putBoolean(KEY_FLIP_TO_PANIC, it.toBoolean()) }
+        props["VOLUME_BUTTON_PANIC_ENABLED"]?.let { editor.putBoolean(KEY_VOLUME_BUTTON_PANIC, it.toBoolean()) }
+        props["LAUNCHER_DISGUISE_PRESET"]?.let { editor.putString(KEY_LAUNCHER_PRESET, it) }
+        props["SSI_STREAM_QUALITY"]?.let { editor.putString(KEY_SSI_STREAM_QUALITY, it) }
+
+        editor.apply()
+        loadSettings()
     }
 }

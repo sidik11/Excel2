@@ -63,6 +63,10 @@ data class AppSettings(
     val galleryGridDensity: String = "STANDARD", // "COMPACT", "STANDARD", "COZY"
     val uiAnimationSpeed: String = "NORMAL", // "FAST", "NORMAL", "RELAXED", "OFF"
     val defaultStartTab: String = "EXCEL", // "EXCEL", "VAULT", "SSHOW", "DUAL_VAULT", "SRA", "RNAME", "SETTINGS"
+    val flipToPanicEnabled: Boolean = true,
+    val volumeButtonPanicEnabled: Boolean = true,
+    val launcherDisguisePreset: String = "EXCEL", // "EXCEL", "CALCULATOR", "NOTES", "COMPASS", "CLOCK", "WEATHER", "MUSIC", "CUSTOM"
+    val ssiStreamQuality: String = "ULTRA_FAST", // "ULTRA_FAST", "BALANCED", "ORIGINAL"
     val highQualityRendering: Boolean = true,
     val showStorageStatsHeader: Boolean = true
 )

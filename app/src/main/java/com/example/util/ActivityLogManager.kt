@@ -159,4 +159,71 @@ object ActivityLogManager {
             } catch (_: Throwable) {}
         }
     }
+
+    /**
+     * Serializes offline activity logs to JSON string for backup in fingerprint.dat.
+     */
+    fun exportLogsJson(): String {
+        return try {
+            val array = JSONArray()
+            _logs.value.forEach { item ->
+                val obj = JSONObject().apply {
+                    put("id", item.id)
+                    put("timestamp", item.timestamp)
+                    put("formattedTime", item.formattedTime)
+                    put("type", item.type)
+                    put("title", item.title)
+                    put("description", item.description)
+                    put("details", item.details)
+                    put("severity", item.severity)
+                }
+                array.put(obj)
+            }
+            array.toString()
+        } catch (_: Throwable) {
+            "[]"
+        }
+    }
+
+    /**
+     * Imports and saves activity logs from JSON string (e.g. from fingerprint.dat).
+     */
+    fun importLogsJson(context: Context, jsonStr: String): Boolean {
+        if (jsonStr.isBlank() || jsonStr == "[]") return false
+        return try {
+            val array = JSONArray(jsonStr)
+            val list = mutableListOf<ActivityLogEntry>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    ActivityLogEntry(
+                        id = obj.optString("id", UUID.randomUUID().toString()),
+                        timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                        formattedTime = obj.optString("formattedTime", ""),
+                        type = obj.optString("type", "INFO"),
+                        title = obj.optString("title", "Event"),
+                        description = obj.optString("description", ""),
+                        details = obj.optString("details", ""),
+                        severity = obj.optString("severity", "INFO")
+                    )
+                )
+            }
+            if (list.isNotEmpty()) {
+                val sorted = list.sortedByDescending { it.timestamp }
+                _logs.value = sorted
+                val pretty = array.toString(2)
+                try {
+                    val file = getActivityFile(context)
+                    file.writeText(pretty, Charsets.UTF_8)
+                } catch (_: Throwable) {}
+                try {
+                    val fallback = getFallbackFile(context)
+                    fallback.writeText(pretty, Charsets.UTF_8)
+                } catch (_: Throwable) {}
+                true
+            } else false
+        } catch (_: Throwable) {
+            false
+        }
+    }
 }

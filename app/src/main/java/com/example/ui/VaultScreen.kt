@@ -12,6 +12,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -323,17 +324,23 @@ fun VaultScreen(
                         showAddImagesChoiceDialog = true
                     },
                     onImageClick = { index -> viewModel.openModal(index) },
-                    onImageLongClick = { img -> viewModel.toggleSelectImage(img.id) },
+                    onImageLongClick = { img ->
+                        if (!uiState.isMultiSelectActive) {
+                            viewModel.startMultiSelect(img.id)
+                        } else {
+                            viewModel.toggleSelectImage(img.id)
+                        }
+                    },
                     onToggleSelect = { id -> viewModel.toggleSelectImage(id) },
                     onSelectAll = { viewModel.selectAll() },
                     onClearSelect = { viewModel.clearSelection() },
-                    onDeleteSelected = { viewModel.deleteSelectedImages() },
-                    onExportSelected = { viewModel.exportSelectedImages() },
+                    onOpenDeleteConfirm = { viewModel.openDeleteConfirmDialog() },
+                    onOpenFolderAction = { viewModel.openFolderActionDialog() },
+                    onOpenMobileStorage = { viewModel.openMobileStorageDialog() },
                     onShareSelected = { viewModel.shareSelectedImages(context) },
                     onOpenCreateFolder = { viewModel.openCreateFolderDialog() },
                     onSelectFolder = { folderId -> viewModel.setFolder(folderId) },
                     onRenameImage = { img -> viewModel.openRenameDialog(img) },
-                    onMoveSelected = { viewModel.openMoveDialog() },
                     onSearchQueryChange = { viewModel.setSearchQuery(it) },
                     onSortModeChange = { viewModel.setSortMode(it) },
                     onToggleViewMode = { viewModel.toggleGridView() },
@@ -415,6 +422,34 @@ fun VaultScreen(
                 currentName = uiState.renameTargetImage!!.name,
                 onDismiss = { viewModel.closeRenameDialog() },
                 onRename = { newName -> viewModel.renameImage(newName) }
+            )
+        }
+
+        if (uiState.isDeleteConfirmDialogOpen) {
+            DeleteConfirmDialog(
+                count = uiState.selectedImageIds.size,
+                onDismiss = { viewModel.closeDeleteConfirmDialog() },
+                onConfirm = { viewModel.deleteSelectedImages() }
+            )
+        }
+
+        if (uiState.isFolderActionDialogOpen) {
+            VaultFolderActionDialog(
+                count = uiState.selectedImageIds.size,
+                folders = uiState.folders,
+                onDismiss = { viewModel.closeFolderActionDialog() },
+                onMove = { targetId -> viewModel.moveSelectedImages(targetId) },
+                onCopy = { targetId -> viewModel.copySelectedImages(targetId) },
+                onOpenCreateFolder = { viewModel.openCreateFolderDialog() }
+            )
+        }
+
+        if (uiState.isMobileStorageDialogOpen) {
+            MobileStorageActionDialog(
+                count = uiState.selectedImageIds.size,
+                onDismiss = { viewModel.closeMobileStorageDialog() },
+                onCopyToMobile = { viewModel.exportSelectedImages(deleteFromVaultAfterExport = false) },
+                onMoveToMobile = { viewModel.exportSelectedImages(deleteFromVaultAfterExport = true) }
             )
         }
 
@@ -925,13 +960,13 @@ private fun UnlockedGalleryView(
     onToggleSelect: (String) -> Unit,
     onSelectAll: () -> Unit,
     onClearSelect: () -> Unit,
-    onDeleteSelected: () -> Unit,
-    onExportSelected: () -> Unit,
+    onOpenDeleteConfirm: () -> Unit,
+    onOpenFolderAction: () -> Unit,
+    onOpenMobileStorage: () -> Unit,
     onShareSelected: () -> Unit,
     onOpenCreateFolder: () -> Unit,
     onSelectFolder: (String?) -> Unit,
     onRenameImage: (VaultImage) -> Unit,
-    onMoveSelected: () -> Unit,
     onSearchQueryChange: (String) -> Unit,
     onSortModeChange: (VaultSortMode) -> Unit,
     onToggleViewMode: () -> Unit,
@@ -1080,41 +1115,87 @@ private fun UnlockedGalleryView(
         if (uiState.isMultiSelectActive) {
             Spacer(modifier = Modifier.height(6.dp))
             Surface(
-                color = VaultAccent.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, VaultAccent),
-                modifier = Modifier.fillMaxWidth()
+                color = VaultAccent.copy(alpha = 0.25f),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, VaultCyan.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth().testTag("multiselect_action_bar")
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${uiState.selectedImageIds.size} selected",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${uiState.selectedImageIds.size} Selected",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            TextButton(
+                                onClick = onSelectAll,
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (uiState.selectedImageIds.size == uiState.displayedImages.size) "Deselect All" else "Select All",
+                                    fontSize = 11.sp,
+                                    color = VaultCyan
+                                )
+                            }
+                        }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onSelectAll, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Check, contentDescription = "Select All", tint = Color.White, modifier = Modifier.size(16.dp))
+                        IconButton(onClick = onClearSelect, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = VaultMuted, modifier = Modifier.size(18.dp))
                         }
-                        IconButton(onClick = onMoveSelected, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.DriveFileMove, contentDescription = "Move", tint = VaultCyan, modifier = Modifier.size(16.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Action Buttons Row: Vault Folder (Move/Copy) | Phone Export (Move/Copy) | Delete
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // 1. Move/Copy to Vault Folder
+                        Button(
+                            onClick = onOpenFolderAction,
+                            colors = ButtonDefaults.buttonColors(containerColor = VaultCyan, contentColor = Color.Black),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.weight(1.1f).height(32.dp).testTag("btn_vault_folder_action")
+                        ) {
+                            Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Vault Folder", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
-                        IconButton(onClick = onExportSelected, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.FileDownload, contentDescription = "Export", tint = VaultSuccess, modifier = Modifier.size(16.dp))
+
+                        // 2. Move/Copy to Phone Storage
+                        Button(
+                            onClick = onOpenMobileStorage,
+                            colors = ButtonDefaults.buttonColors(containerColor = VaultSuccess, contentColor = Color.Black),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.weight(1.1f).height(32.dp).testTag("btn_mobile_storage_action")
+                        ) {
+                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Phone Export", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
-                        IconButton(onClick = onShareSelected, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White, modifier = Modifier.size(16.dp))
-                        }
-                        IconButton(onClick = onDeleteSelected, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete", tint = VaultDanger, modifier = Modifier.size(16.dp))
-                        }
-                        IconButton(onClick = onClearSelect, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancel", tint = VaultMuted, modifier = Modifier.size(16.dp))
+
+                        // 3. Delete Selected
+                        Button(
+                            onClick = onOpenDeleteConfirm,
+                            colors = ButtonDefaults.buttonColors(containerColor = VaultDanger, contentColor = Color.White),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.weight(0.9f).height(32.dp).testTag("btn_delete_selected")
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Delete", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1205,6 +1286,7 @@ private fun UnlockedGalleryView(
 // ==========================================
 // Grid Card
 // ==========================================
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VaultImageGridCard(
     image: VaultImage,
@@ -1219,13 +1301,16 @@ private fun VaultImageGridCard(
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = VaultCardBg),
         border = BorderStroke(
-            1.dp,
+            if (isSelected) 2.dp else 1.dp,
             if (isSelected) VaultCyan else Color.White.copy(alpha = 0.08f)
         ),
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             SubcomposeAsyncImage(
@@ -1260,17 +1345,28 @@ private fun VaultImageGridCard(
                 )
             }
 
-            // Selection Checkbox
+            // Selection Indicator Overlay
             if (isMultiSelectActive) {
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = { onClick() },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = VaultCyan,
-                        checkmarkColor = Color.Black
-                    ),
-                    modifier = Modifier.align(Alignment.TopEnd).size(28.dp)
-                )
+                Surface(
+                    color = if (isSelected) VaultCyan else Color.Black.copy(alpha = 0.6f),
+                    shape = CircleShape,
+                    border = BorderStroke(1.5.dp, if (isSelected) VaultCyan else Color.White.copy(alpha = 0.8f)),
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(6.dp)
+                        .size(24.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint = Color.Black,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -1279,6 +1375,7 @@ private fun VaultImageGridCard(
 // ==========================================
 // List Card
 // ==========================================
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VaultImageListCard(
     image: VaultImage,
@@ -1292,8 +1389,13 @@ private fun VaultImageListCard(
     Card(
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = VaultCardBg),
-        border = BorderStroke(1.dp, if (isSelected) VaultCyan else Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+        border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) VaultCyan else Color.White.copy(alpha = 0.08f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(8.dp),
@@ -1801,3 +1903,283 @@ private fun AddImagesChoiceDialog(
         }
     )
 }
+
+// ==========================================
+// Delete Confirmation Dialog
+// ==========================================
+@Composable
+private fun DeleteConfirmDialog(
+    count: Int,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = VaultCardBg,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Delete, contentDescription = null, tint = VaultDanger, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Delete $count Images?", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        },
+        text = {
+            Column {
+                Text(
+                    text = "Are you sure you want to delete $count selected image(s) from this vault container?",
+                    color = Color.White,
+                    fontSize = 13.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "The images will be removed from the active gallery. You can run 'Compact' in the vault header at any time to physically reclaim disk space.",
+                    color = VaultMuted,
+                    fontSize = 11.sp
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = VaultDanger, contentColor = Color.White),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Delete ($count)", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = VaultMuted)
+            }
+        }
+    )
+}
+
+// ==========================================
+// Vault Folders: Move / Copy Dialog
+// ==========================================
+@Composable
+private fun VaultFolderActionDialog(
+    count: Int,
+    folders: List<com.example.util.ImgVaultFolder>,
+    onDismiss: () -> Unit,
+    onMove: (targetFolderId: String?) -> Unit,
+    onCopy: (targetFolderId: String?) -> Unit,
+    onOpenCreateFolder: () -> Unit
+) {
+    var selectedTargetFolderId by remember { mutableStateOf<String?>(null) } // null = Main Gallery
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = VaultCardBg,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Folder, contentDescription = null, tint = VaultCyan, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Vault Folders ($count items)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text("Select destination folder inside vault:", fontSize = 12.sp, color = VaultMuted)
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Folder Choices list
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Option: Root / Main Gallery
+                    Surface(
+                        color = if (selectedTargetFolderId == null) VaultAccent.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.05f),
+                        border = BorderStroke(1.dp, if (selectedTargetFolderId == null) VaultCyan else Color.Transparent),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().clickable { selectedTargetFolderId = null }
+                    ) {
+                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = selectedTargetFolderId == null,
+                                onClick = { selectedTargetFolderId = null },
+                                colors = RadioButtonDefaults.colors(selectedColor = VaultCyan)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(Icons.Default.FolderOpen, contentDescription = null, tint = VaultCyan, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Main Gallery (No folder)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+
+                    // Existing user folders
+                    folders.forEach { f ->
+                        Surface(
+                            color = if (selectedTargetFolderId == f.id) VaultAccent.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.05f),
+                            border = BorderStroke(1.dp, if (selectedTargetFolderId == f.id) VaultCyan else Color.Transparent),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().clickable { selectedTargetFolderId = f.id }
+                        ) {
+                            Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(
+                                    selected = selectedTargetFolderId == f.id,
+                                    onClick = { selectedTargetFolderId = f.id },
+                                    colors = RadioButtonDefaults.colors(selectedColor = VaultCyan)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(Icons.Default.Folder, contentDescription = null, tint = VaultCyan, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(f.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // + New folder shortcut
+                OutlinedButton(
+                    onClick = onOpenCreateFolder,
+                    border = BorderStroke(1.dp, VaultCyan.copy(alpha = 0.4f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = VaultCyan),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("+ Create New Folder", fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = { onCopy(selectedTargetFolderId) },
+                    border = BorderStroke(1.dp, VaultCyan),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = VaultCyan),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Copy Here", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = { onMove(selectedTargetFolderId) },
+                    colors = ButtonDefaults.buttonColors(containerColor = VaultCyan, contentColor = Color.Black),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.DriveFileMove, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Move Here", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = VaultMuted)
+            }
+        }
+    )
+}
+
+// ==========================================
+// Mobile Local Storage: Move / Copy Dialog
+// ==========================================
+@Composable
+private fun MobileStorageActionDialog(
+    count: Int,
+    onDismiss: () -> Unit,
+    onCopyToMobile: () -> Unit,
+    onMoveToMobile: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = VaultCardBg,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.FileDownload, contentDescription = null, tint = VaultSuccess, modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Phone Storage ($count items)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Export decrypted images to your device gallery (Pictures/IMGVault). Choose an option below:",
+                    color = VaultMuted,
+                    fontSize = 12.sp
+                )
+
+                // Option 1: Copy to Mobile (Keep in Vault)
+                Surface(
+                    onClick = onCopyToMobile,
+                    color = Color.White.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, VaultSuccess.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().testTag("opt_copy_to_mobile")
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = VaultSuccess.copy(alpha = 0.2f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, tint = VaultSuccess, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Copy to Mobile (Keep in Vault)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                "Saves unencrypted copies to phone gallery. Originals remain securely inside the vault.",
+                                color = VaultMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+
+                // Option 2: Move to Mobile (Delete from Vault)
+                Surface(
+                    onClick = onMoveToMobile,
+                    color = Color.White.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, VaultAccent.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().testTag("opt_move_to_mobile")
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = VaultAccent.copy(alpha = 0.2f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.DriveFileMove, contentDescription = null, tint = VaultAccent, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Move to Mobile (Delete from Vault)", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                "Saves unencrypted copies to phone gallery and deletes them from this vault container.",
+                                color = VaultMuted,
+                                fontSize = 11.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = VaultMuted)
+            }
+        }
+    )
+}
+

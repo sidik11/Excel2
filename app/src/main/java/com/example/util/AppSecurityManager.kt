@@ -82,6 +82,7 @@ object AppSecurityManager {
 
     fun init(context: Context) {
         appContext = context.applicationContext
+        SettingsManager.init(context)
         if (isInitialized) return
         isInitialized = true
 
@@ -487,6 +488,30 @@ object AppSecurityManager {
         val pinHash = current.pinHash
         val isPinEnabled = current.isPinEnabled || pinCode.isNotEmpty() || pinHash.isNotEmpty()
 
+        val appSettings = SettingsManager.settings.value
+        val settingsJson = SettingsManager.settingsToJson()
+
+        val panicFile = if (appSettings.panicCustomImageUri.isNotBlank()) {
+            val f = File(appSettings.panicCustomImageUri)
+            if (f.exists() && f.length() > 0) f else File(AppStorageHelper.getSecurityDir(context), "panic_custom_disguise.jpg")
+        } else {
+            File(AppStorageHelper.getSecurityDir(context), "panic_custom_disguise.jpg")
+        }
+        var panicB64 = ""
+        if (panicFile.exists() && panicFile.length() > 0) {
+            try {
+                panicB64 = android.util.Base64.encodeToString(panicFile.readBytes(), android.util.Base64.NO_WRAP)
+            } catch (_: Throwable) {}
+        }
+
+        val activityLogsJson = ActivityLogManager.exportLogsJson()
+        var actLogsB64 = ""
+        if (activityLogsJson.isNotBlank() && activityLogsJson != "[]") {
+            try {
+                actLogsB64 = android.util.Base64.encodeToString(activityLogsJson.toByteArray(StandardCharsets.UTF_8), android.util.Base64.NO_WRAP)
+            } catch (_: Throwable) {}
+        }
+
         val backupContent = buildString {
             appendLine("# ========================================================")
             appendLine("# AI STUDIO APP SECURITY - REGISTERED FINGERPRINT BACKUP")
@@ -510,12 +535,78 @@ object AppSecurityManager {
             appendLine("GOOGLE_NAME=${profile?.googleDisplayName ?: ""}")
             appendLine("GOOGLE_ID=${profile?.googleId ?: ""}")
             appendLine("GOOGLE_CONNECTED=${profile?.isGoogleConnected ?: false}")
-            val appSettings = SettingsManager.settings.value
+            appendLine("SETTINGS_JSON=$settingsJson")
             appendLine("FB_CONNECTED=${appSettings.facebookConnected}")
             appendLine("FB_USERNAME=${appSettings.facebookUserName}")
             appendLine("FACE_LOCK_ENABLED=${appSettings.faceLockEnabled || current.isFaceLockEnabled}")
             appendLine("RECENT_APP_PRIVACY=${appSettings.recentAppPrivacy}")
             appendLine("APP_DOWNLOAD_URL=${appSettings.appDownloadUrl}")
+
+            // 1. Panic Mode & Emergency Controls
+            appendLine("SHAKE_TO_LOCK_ENABLED=${appSettings.shakeToLockEnabled}")
+            appendLine("SHAKE_TO_LOCK_DURATION=${appSettings.shakeToLockDurationSeconds}")
+            appendLine("FLIP_TO_PANIC_ENABLED=${appSettings.flipToPanicEnabled}")
+            appendLine("VOLUME_BUTTON_PANIC_ENABLED=${appSettings.volumeButtonPanicEnabled}")
+            appendLine("PANIC_CUSTOM_IMAGE_URI=${appSettings.panicCustomImageUri}")
+            if (panicB64.isNotEmpty()) {
+                appendLine("PANIC_IMAGE_BASE64=$panicB64")
+            }
+            if (actLogsB64.isNotEmpty()) {
+                appendLine("ACTIVITY_LOGS_BASE64=$actLogsB64")
+            }
+
+            // 2. Storage & Low RAM Architecture
+            appendLine("USE_INTERNAL_STORAGE_RAM=${appSettings.useInternalStorageReplaceRam}")
+            appendLine("DEDICATED_MEDIA_FOLDER=${appSettings.dedicatedMediaFolderEnabled}")
+            appendLine("CLEAN_EX_ON_LOCK=${appSettings.cleanExVaultOnLock}")
+            appendLine("LOW_RAM_MODE=${appSettings.isLowRamMode}")
+            appendLine("DIRECT_FOLDER_ACCESS=${appSettings.isDirectFolderAccess}")
+            appendLine("AUTO_ZIP_MEDIA_ON_LOCK=${appSettings.autoZipMediaOnLock}")
+            appendLine("DELETE_RAW_MEDIA_AFTER_ZIP=${appSettings.deleteRawMediaAfterZip}")
+
+            // 3. Gallery & Grid Customization
+            appendLine("GRID_COLUMNS=${appSettings.gridColumns}")
+            appendLine("IMAGE_FIT_MODE=${appSettings.imageFitMode}")
+            appendLine("SHOW_FILE_INFO_OVERLAY=${appSettings.showFileInfoOverlay}")
+            appendLine("HAPTIC_FEEDBACK=${appSettings.hapticFeedback}")
+            appendLine("HIGH_CONTRAST_BORDERS=${appSettings.highContrastBorders}")
+            appendLine("GALLERY_GRID_DENSITY=${appSettings.galleryGridDensity}")
+
+            // 4. Theme Appearance
+            appendLine("APP_THEME=${appSettings.theme.name}")
+            appendLine("THEME=${appSettings.theme.name}")
+            appendLine("CUSTOM_ACCENT_COLOR=${appSettings.customAccentColor}")
+
+            // 5. Slideshow & Playback
+            appendLine("SLIDESHOW_SPEED_MS=${appSettings.slideshowSpeedMs}")
+            appendLine("FAST_FORWARD_SPEED_MS=${appSettings.fastForwardSpeedMs}")
+            appendLine("SLIDESHOW_TRANSITION=${appSettings.slideshowTransition}")
+            appendLine("SLIDESHOW_LOOP=${appSettings.slideshowLoop}")
+            appendLine("SRA_INTERVAL=${appSettings.sraSlideshowIntervalSeconds}")
+            appendLine("SRA_AUTO_LOOP=${appSettings.sraAutoLoop}")
+            appendLine("SRA_SHOW_NAME_BADGE=${appSettings.sraShowNameBadge}")
+            appendLine("SRA_PAUSE_ON_TAP=${appSettings.sraPauseOnTap}")
+            appendLine("SRA_TRANSITION=${appSettings.sraTransition}")
+            appendLine("SSI_INTERVAL=${appSettings.ssiSlideshowIntervalSeconds}")
+            appendLine("SSI_AUTO_LOOP=${appSettings.ssiAutoLoop}")
+            appendLine("SSI_STREAM_QUALITY=${appSettings.ssiStreamQuality}")
+            appendLine("DUAL_VAULT_INTERVAL=${appSettings.dualVaultSlideshowIntervalSeconds}")
+
+            // 6. App Customization & Display
+            appendLine("UI_ANIMATION_SPEED=${appSettings.uiAnimationSpeed}")
+            appendLine("DEFAULT_START_TAB=${appSettings.defaultStartTab}")
+            appendLine("HIGH_QUALITY_RENDERING=${appSettings.highQualityRendering}")
+            appendLine("SHOW_STORAGE_STATS_HEADER=${appSettings.showStorageStatsHeader}")
+            appendLine("AUTO_LOCK_TIMEOUT_MINUTES=${appSettings.autoLockTimeoutMinutes}")
+            appendLine("THUMBNAIL_QUALITY=${appSettings.thumbnailQuality}")
+            appendLine("LAUNCHER_DISGUISE_NAME=${appSettings.launcherDisguiseName}")
+            appendLine("LAUNCHER_DISGUISE_PRESET=${appSettings.launcherDisguisePreset}")
+            appendLine("LAUNCHER_CUSTOM_ICON_URI=${appSettings.launcherCustomIconUri}")
+            appendLine("RNAME_PREFIX=${appSettings.rnameSequencePrefix}")
+            appendLine("RNAME_PADDING=${appSettings.rnamePaddingDigits}")
+            appendLine("RNAME_START_NUM=${appSettings.rnameStartNumber}")
+            appendLine("RNAME_CONFIRM=${appSettings.rnameConfirmBeforeRename}")
+
             val dvSession = FirebaseBridgeManager.currentSession.value
             if (dvSession.code.isNotBlank()) {
                 appendLine("DUAL_VAULT_CODE=${dvSession.code}")
@@ -578,6 +669,13 @@ object AppSecurityManager {
                 put("deviceProfileCode", profile?.deviceCode ?: "")
                 put("recentAppPrivacy", curSettings.recentAppPrivacy)
                 put("appDownloadUrl", curSettings.appDownloadUrl)
+                put("appSettings", SettingsManager.settingsToJson())
+                if (panicB64.isNotEmpty()) {
+                    put("panicImageBase64", panicB64)
+                }
+                if (activityLogsJson.isNotBlank() && activityLogsJson != "[]") {
+                    put("activityLogsJson", activityLogsJson)
+                }
                 if (dvSession.code.isNotBlank()) {
                     val dvJson = JSONObject().apply {
                         put("code", dvSession.code)
@@ -735,6 +833,152 @@ object AppSecurityManager {
 
             datFile.writeText(updatedText, StandardCharsets.UTF_8)
             backupFile.writeText(updatedText, StandardCharsets.UTF_8)
+
+            updateFingerprintSettingsDataIfRegistered(context)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Synchronizes all app settings, custom panic screen image, and activity logs
+     * into existing fingerprint.dat, fingerprint_backup.dat, and fingerprint_meta.json.
+     */
+    fun updateFingerprintSettingsDataIfRegistered(context: Context) {
+        val current = _securityConfig.value
+        if (!current.isFingerprintRegistered) return
+
+        val fpDir = AppStorageHelper.getFingerprintDir(context)
+        val datFile = File(fpDir, FINGERPRINT_DAT_FILE_NAME)
+        val backupFile = File(fpDir, FINGERPRINT_BACKUP_FILE_NAME)
+        val metaFile = File(fpDir, FINGERPRINT_META_FILE_NAME)
+        if (!datFile.exists() && !backupFile.exists()) return
+
+        val targetFile = if (datFile.exists() && datFile.length() > 0) datFile else backupFile
+        if (!targetFile.exists()) return
+
+        try {
+            val appSet = SettingsManager.settings.value
+            val settingsJsonStr = SettingsManager.settingsToJson().toString()
+            val content = targetFile.readText(StandardCharsets.UTF_8)
+            var updatedText = content
+
+            // Update or append SETTINGS_JSON
+            updatedText = if (updatedText.contains("SETTINGS_JSON=")) {
+                updatedText.lines().joinToString("\n") { line ->
+                    if (line.trim().startsWith("SETTINGS_JSON=")) "SETTINGS_JSON=$settingsJsonStr" else line
+                }
+            } else {
+                updatedText + "\nSETTINGS_JSON=$settingsJsonStr"
+            }
+
+            // Update individual settings keys
+            val settingsMap = mapOf(
+                "SHAKE_TO_LOCK_ENABLED=" to appSet.shakeToLockEnabled.toString(),
+                "SHAKE_TO_LOCK_DURATION=" to appSet.shakeToLockDurationSeconds.toString(),
+                "FLIP_TO_PANIC_ENABLED=" to appSet.flipToPanicEnabled.toString(),
+                "VOLUME_BUTTON_PANIC_ENABLED=" to appSet.volumeButtonPanicEnabled.toString(),
+                "PANIC_CUSTOM_IMAGE_URI=" to appSet.panicCustomImageUri,
+                "USE_INTERNAL_STORAGE_RAM=" to appSet.useInternalStorageReplaceRam.toString(),
+                "DEDICATED_MEDIA_FOLDER=" to appSet.dedicatedMediaFolderEnabled.toString(),
+                "CLEAN_EX_ON_LOCK=" to appSet.cleanExVaultOnLock.toString(),
+                "LOW_RAM_MODE=" to appSet.isLowRamMode.toString(),
+                "DIRECT_FOLDER_ACCESS=" to appSet.isDirectFolderAccess.toString(),
+                "AUTO_ZIP_MEDIA_ON_LOCK=" to appSet.autoZipMediaOnLock.toString(),
+                "DELETE_RAW_MEDIA_AFTER_ZIP=" to appSet.deleteRawMediaAfterZip.toString(),
+                "GRID_COLUMNS=" to appSet.gridColumns.toString(),
+                "IMAGE_FIT_MODE=" to appSet.imageFitMode,
+                "SHOW_FILE_INFO_OVERLAY=" to appSet.showFileInfoOverlay.toString(),
+                "HAPTIC_FEEDBACK=" to appSet.hapticFeedback.toString(),
+                "HIGH_CONTRAST_BORDERS=" to appSet.highContrastBorders.toString(),
+                "GALLERY_GRID_DENSITY=" to appSet.galleryGridDensity,
+                "APP_THEME=" to appSet.theme.name,
+                "THEME=" to appSet.theme.name,
+                "CUSTOM_ACCENT_COLOR=" to appSet.customAccentColor,
+                "SLIDESHOW_SPEED_MS=" to appSet.slideshowSpeedMs.toString(),
+                "FAST_FORWARD_SPEED_MS=" to appSet.fastForwardSpeedMs.toString(),
+                "SLIDESHOW_TRANSITION=" to appSet.slideshowTransition,
+                "SLIDESHOW_LOOP=" to appSet.slideshowLoop.toString(),
+                "SRA_INTERVAL=" to appSet.sraSlideshowIntervalSeconds.toString(),
+                "SRA_AUTO_LOOP=" to appSet.sraAutoLoop.toString(),
+                "SRA_SHOW_NAME_BADGE=" to appSet.sraShowNameBadge.toString(),
+                "SRA_PAUSE_ON_TAP=" to appSet.sraPauseOnTap.toString(),
+                "SRA_TRANSITION=" to appSet.sraTransition,
+                "SSI_INTERVAL=" to appSet.ssiSlideshowIntervalSeconds.toString(),
+                "SSI_AUTO_LOOP=" to appSet.ssiAutoLoop.toString(),
+                "SSI_STREAM_QUALITY=" to appSet.ssiStreamQuality,
+                "DUAL_VAULT_INTERVAL=" to appSet.dualVaultSlideshowIntervalSeconds.toString(),
+                "UI_ANIMATION_SPEED=" to appSet.uiAnimationSpeed,
+                "DEFAULT_START_TAB=" to appSet.defaultStartTab,
+                "HIGH_QUALITY_RENDERING=" to appSet.highQualityRendering.toString(),
+                "SHOW_STORAGE_STATS_HEADER=" to appSet.showStorageStatsHeader.toString(),
+                "AUTO_LOCK_TIMEOUT_MINUTES=" to appSet.autoLockTimeoutMinutes.toString(),
+                "THUMBNAIL_QUALITY=" to appSet.thumbnailQuality,
+                "LAUNCHER_DISGUISE_NAME=" to appSet.launcherDisguiseName,
+                "LAUNCHER_DISGUISE_PRESET=" to appSet.launcherDisguisePreset,
+                "LAUNCHER_CUSTOM_ICON_URI=" to appSet.launcherCustomIconUri,
+                "RNAME_PREFIX=" to appSet.rnameSequencePrefix,
+                "RNAME_PADDING=" to appSet.rnamePaddingDigits.toString(),
+                "RNAME_START_NUM=" to appSet.rnameStartNumber.toString(),
+                "RNAME_CONFIRM=" to appSet.rnameConfirmBeforeRename.toString()
+            )
+
+            settingsMap.forEach { (prefix, value) ->
+                updatedText = if (updatedText.contains(prefix)) {
+                    updatedText.lines().joinToString("\n") { line ->
+                        if (line.trim().startsWith(prefix)) "$prefix$value" else line
+                    }
+                } else {
+                    updatedText + "\n$prefix$value"
+                }
+            }
+
+            val panicFile = if (appSet.panicCustomImageUri.isNotBlank()) {
+                val f = File(appSet.panicCustomImageUri)
+                if (f.exists() && f.length() > 0) f else File(AppStorageHelper.getSecurityDir(context), "panic_custom_disguise.jpg")
+            } else {
+                File(AppStorageHelper.getSecurityDir(context), "panic_custom_disguise.jpg")
+            }
+            if (panicFile.exists() && panicFile.length() > 0) {
+                try {
+                    val pB64 = android.util.Base64.encodeToString(panicFile.readBytes(), android.util.Base64.NO_WRAP)
+                    updatedText = if (updatedText.contains("PANIC_IMAGE_BASE64=")) {
+                        updatedText.lines().joinToString("\n") { line ->
+                            if (line.trim().startsWith("PANIC_IMAGE_BASE64=")) "PANIC_IMAGE_BASE64=$pB64" else line
+                        }
+                    } else {
+                        updatedText + "\nPANIC_IMAGE_BASE64=$pB64"
+                    }
+                } catch (_: Throwable) {}
+            }
+
+            val actLogs = ActivityLogManager.exportLogsJson()
+            if (actLogs.isNotBlank() && actLogs != "[]") {
+                try {
+                    val logsB64 = android.util.Base64.encodeToString(actLogs.toByteArray(StandardCharsets.UTF_8), android.util.Base64.NO_WRAP)
+                    updatedText = if (updatedText.contains("ACTIVITY_LOGS_BASE64=")) {
+                        updatedText.lines().joinToString("\n") { line ->
+                            if (line.trim().startsWith("ACTIVITY_LOGS_BASE64=")) "ACTIVITY_LOGS_BASE64=$logsB64" else line
+                        }
+                    } else {
+                        updatedText + "\nACTIVITY_LOGS_BASE64=$logsB64"
+                    }
+                } catch (_: Throwable) {}
+            }
+
+            datFile.writeText(updatedText, StandardCharsets.UTF_8)
+            backupFile.writeText(updatedText, StandardCharsets.UTF_8)
+
+            if (metaFile.exists()) {
+                try {
+                    val metaJson = JSONObject(metaFile.readText(StandardCharsets.UTF_8))
+                    metaJson.put("appSettings", SettingsManager.settingsToJson())
+                    if (actLogs.isNotBlank() && actLogs != "[]") {
+                        metaJson.put("activityLogsJson", actLogs)
+                    }
+                    metaFile.writeText(metaJson.toString(2), StandardCharsets.UTF_8)
+                } catch (_: Throwable) {}
+            }
         } catch (e: Throwable) {
             e.printStackTrace()
         }
@@ -819,6 +1063,12 @@ object AppSecurityManager {
             var lineDownloadUrl = ""
             var lineLogoB64 = ""
 
+            val lineProps = mutableMapOf<String, String>()
+            var lineSettingsJson = ""
+            var linePanicB64 = ""
+            var lineActivityLogsB64 = ""
+            var lineActivityLogsJson = ""
+
             if (content.trim().startsWith("{")) {
                 val json = JSONObject(content)
                 val profileObj = json.optJSONObject("profile")
@@ -842,6 +1092,13 @@ object AppSecurityManager {
                 }
                 lineDownloadUrl = json.optString("appDownloadUrl", "")
                 lineLogoB64 = json.optString("appLogoBase64", "")
+
+                val appSettingsObj = json.optJSONObject("appSettings")
+                if (appSettingsObj != null) {
+                    SettingsManager.restoreSettingsFromJson(appSettingsObj)
+                }
+                linePanicB64 = json.optString("panicImageBase64", "")
+                lineActivityLogsJson = json.optString("activityLogsJson", "")
             } else {
                 content.lines().forEach { line ->
                     val trimmed = line.trim()
@@ -892,11 +1149,55 @@ object AppSecurityManager {
                         trimmed.startsWith("APP_LOGO_BASE64=") -> {
                             lineLogoB64 = trimmed.removePrefix("APP_LOGO_BASE64=").trim()
                         }
+                        trimmed.startsWith("SETTINGS_JSON=") -> {
+                            lineSettingsJson = trimmed.removePrefix("SETTINGS_JSON=").trim()
+                        }
+                        trimmed.startsWith("PANIC_IMAGE_BASE64=") -> {
+                            linePanicB64 = trimmed.removePrefix("PANIC_IMAGE_BASE64=").trim()
+                        }
+                        trimmed.startsWith("ACTIVITY_LOGS_BASE64=") -> {
+                            lineActivityLogsB64 = trimmed.removePrefix("ACTIVITY_LOGS_BASE64=").trim()
+                        }
+                        trimmed.startsWith("ACTIVITY_LOGS_JSON=") -> {
+                            lineActivityLogsJson = trimmed.removePrefix("ACTIVITY_LOGS_JSON=").trim()
+                        }
+                    }
+
+                    if (trimmed.contains("=") && !trimmed.startsWith("#")) {
+                        val parts = trimmed.split("=", limit = 2)
+                        if (parts.size == 2) {
+                            lineProps[parts[0].trim()] = parts[1].trim()
+                        }
                     }
                 }
             }
 
             // Restore App Settings from backup
+            if (lineSettingsJson.isNotEmpty()) {
+                try {
+                    SettingsManager.restoreSettingsFromJson(JSONObject(lineSettingsJson))
+                } catch (_: Throwable) {}
+            }
+            if (lineProps.isNotEmpty()) {
+                SettingsManager.restoreSettingsFromKeyValues(lineProps)
+            }
+            if (linePanicB64.isNotEmpty()) {
+                try {
+                    val bytes = android.util.Base64.decode(linePanicB64, android.util.Base64.NO_WRAP)
+                    val panicFile = File(AppStorageHelper.getSecurityDir(context), "panic_custom_disguise.jpg")
+                    panicFile.writeBytes(bytes)
+                    SettingsManager.setPanicCustomImageUri(panicFile.absolutePath)
+                } catch (_: Throwable) {}
+            }
+            if (lineActivityLogsB64.isNotEmpty()) {
+                try {
+                    val decodedLogs = String(android.util.Base64.decode(lineActivityLogsB64, android.util.Base64.NO_WRAP), StandardCharsets.UTF_8)
+                    ActivityLogManager.importLogsJson(context, decodedLogs)
+                } catch (_: Throwable) {}
+            } else if (lineActivityLogsJson.isNotBlank() && lineActivityLogsJson != "[]") {
+                ActivityLogManager.importLogsJson(context, lineActivityLogsJson)
+            }
+
             if (lineFbConnected) {
                 SettingsManager.setFacebookConnected(true, lineFbUser)
             }

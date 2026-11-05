@@ -19,6 +19,10 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.InputStreamReader
 import java.io.OutputStream
+import java.io.ByteArrayOutputStream
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.os.Build
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.net.ServerSocket
@@ -301,18 +305,19 @@ object SsiHostServer {
             return send404(output)
         }
 
-        val mimeType = when (file.extension.lowercase()) {
-            "png" -> "image/png"
-            "webp" -> "image/webp"
-            "gif" -> "image/gif"
-            else -> "image/jpeg"
+        val qualitySetting = SettingsManager.settings.value.ssiStreamQuality
+        val (fileBytes, mimeType) = when (qualitySetting) {
+            "ULTRA_FAST" -> compressImageForStreaming(file, maxDimension = 1080, quality = 70)
+                ?: (file.readBytes() to getFileMime(file))
+            "BALANCED" -> compressImageForStreaming(file, maxDimension = 1920, quality = 85)
+                ?: (file.readBytes() to getFileMime(file))
+            else -> file.readBytes() to getFileMime(file)
         }
 
         val iv = ByteArray(8).apply { java.security.SecureRandom().nextBytes(this) }
         val ivHex = iv.joinToString("") { "%02x".format(it) }
         val keyString = "$activeSessionToken:$activePin:$ivHex"
         val keyBytes = keyString.toByteArray(Charsets.UTF_8)
-        val fileBytes = file.readBytes()
         val encryptedBytes = rc4(fileBytes, keyBytes)
         val totalLength = iv.size + encryptedBytes.size
 
@@ -333,6 +338,64 @@ object SsiHostServer {
         output.write(iv)
         output.write(encryptedBytes)
         output.flush()
+    }
+
+    private fun getFileMime(file: File): String {
+        return when (file.extension.lowercase()) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            else -> "image/jpeg"
+        }
+    }
+
+    private fun compressImageForStreaming(file: File, maxDimension: Int, quality: Int): Pair<ByteArray, String>? {
+        return try {
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeFile(file.absolutePath, options)
+            if (options.outWidth <= 0 || options.outHeight <= 0) return null
+
+            var sampleSize = 1
+            var w = options.outWidth
+            var h = options.outHeight
+            while (w > maxDimension * 2 || h > maxDimension * 2) {
+                sampleSize *= 2
+                w /= 2
+                h /= 2
+            }
+
+            val decodeOpts = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val originalBitmap = BitmapFactory.decodeFile(file.absolutePath, decodeOpts) ?: return null
+
+            val finalBitmap = if (originalBitmap.width > maxDimension || originalBitmap.height > maxDimension) {
+                val ratio = minOf(maxDimension.toFloat() / originalBitmap.width, maxDimension.toFloat() / originalBitmap.height)
+                val targetW = (originalBitmap.width * ratio).toInt().coerceAtLeast(1)
+                val targetH = (originalBitmap.height * ratio).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(originalBitmap, targetW, targetH, true).also {
+                    if (it != originalBitmap) originalBitmap.recycle()
+                }
+            } else {
+                originalBitmap
+            }
+
+            val baos = ByteArrayOutputStream()
+            val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Bitmap.CompressFormat.WEBP_LOSSY
+            } else {
+                @Suppress("DEPRECATION")
+                Bitmap.CompressFormat.WEBP
+            }
+            finalBitmap.compress(format, quality, baos)
+            finalBitmap.recycle()
+            baos.toByteArray() to "image/webp"
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     private fun rc4(data: ByteArray, key: ByteArray): ByteArray {

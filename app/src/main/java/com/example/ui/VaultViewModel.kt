@@ -79,6 +79,9 @@ data class VaultUiState(
     val isRenameDialogOpen: Boolean = false,
     val renameTargetImage: VaultImage? = null,
     val isMoveDialogOpen: Boolean = false,
+    val isFolderActionDialogOpen: Boolean = false,
+    val isMobileStorageDialogOpen: Boolean = false,
+    val isDeleteConfirmDialogOpen: Boolean = false,
     val generatedRecoveryKey: String? = null,
     val showRecoveryKeyDialog: Boolean = false,
 
@@ -238,6 +241,36 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeMoveDialog() {
         _uiState.update { it.copy(isMoveDialogOpen = false) }
+    }
+
+    fun openFolderActionDialog() {
+        if (_uiState.value.selectedImageIds.isNotEmpty()) {
+            _uiState.update { it.copy(isFolderActionDialogOpen = true) }
+        }
+    }
+
+    fun closeFolderActionDialog() {
+        _uiState.update { it.copy(isFolderActionDialogOpen = false) }
+    }
+
+    fun openMobileStorageDialog() {
+        if (_uiState.value.selectedImageIds.isNotEmpty()) {
+            _uiState.update { it.copy(isMobileStorageDialogOpen = true) }
+        }
+    }
+
+    fun closeMobileStorageDialog() {
+        _uiState.update { it.copy(isMobileStorageDialogOpen = false) }
+    }
+
+    fun openDeleteConfirmDialog() {
+        if (_uiState.value.selectedImageIds.isNotEmpty()) {
+            _uiState.update { it.copy(isDeleteConfirmDialogOpen = true) }
+        }
+    }
+
+    fun closeDeleteConfirmDialog() {
+        _uiState.update { it.copy(isDeleteConfirmDialogOpen = false) }
     }
 
     fun closeRecoveryKeyDialog() {
@@ -541,6 +574,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         val selectedIds = _uiState.value.selectedImageIds
         if (selectedIds.isEmpty()) return
 
+        closeDeleteConfirmDialog()
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update {
                 it.copy(
@@ -556,7 +590,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                     selectedImageIds = emptySet(),
                     isMultiSelectActive = false,
                     statusMessage = "Deleted ${selectedIds.size} images.",
-                    snackbarMessage = "Images moved to deleted pool. Run Compact to reclaim space."
+                    snackbarMessage = "Deleted ${selectedIds.size} images from vault. Run Compact to reclaim space."
                 )
             }
             loadVaultData(file, key)
@@ -584,8 +618,35 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch(Dispatchers.IO) {
             ImgVaultEngine.moveImages(file, key, selectedIds, targetFolderId)
+            closeFolderActionDialog()
             closeMoveDialog()
-            _uiState.update { it.copy(selectedImageIds = emptySet(), isMultiSelectActive = false) }
+            _uiState.update { 
+                it.copy(
+                    selectedImageIds = emptySet(), 
+                    isMultiSelectActive = false,
+                    snackbarMessage = "Moved ${selectedIds.size} image(s) to folder"
+                ) 
+            }
+            loadVaultData(file, key)
+        }
+    }
+
+    fun copySelectedImages(targetFolderId: String?) {
+        val file = _uiState.value.selectedVaultFile ?: return
+        val key = activeMasterKey ?: return
+        val selectedIds = _uiState.value.selectedImageIds
+        if (selectedIds.isEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            ImgVaultEngine.copyImages(file, key, selectedIds, targetFolderId)
+            closeFolderActionDialog()
+            _uiState.update { 
+                it.copy(
+                    selectedImageIds = emptySet(), 
+                    isMultiSelectActive = false,
+                    snackbarMessage = "Copied ${selectedIds.size} image(s) within vault"
+                ) 
+            }
             loadVaultData(file, key)
         }
     }
@@ -644,7 +705,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun exportSelectedImages() {
+    fun exportSelectedImages(deleteFromVaultAfterExport: Boolean = false) {
         val file = _uiState.value.selectedVaultFile ?: return
         val key = activeMasterKey ?: return
         val context = getApplication<Application>()
@@ -652,12 +713,16 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
         val records = _uiState.value.metadata?.records?.filter { selectedIds.contains(it.id) } ?: emptyList()
         if (records.isEmpty()) return
 
+        closeMobileStorageDialog()
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.update {
                 it.copy(
                     isProcessing = true,
                     progressPercent = 0f,
-                    progressLabel = "Exporting unencrypted copies to Pictures/IMGVault…"
+                    progressLabel = if (deleteFromVaultAfterExport)
+                        "Moving ${records.size} images to mobile storage…"
+                    else
+                        "Copying ${records.size} images to mobile storage…"
                 )
             }
 
@@ -666,7 +731,7 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.update {
                     it.copy(
                         progressPercent = (i.toFloat() / records.size),
-                        progressLabel = "Exporting ${rec.name} (${i + 1}/${records.size})…"
+                        progressLabel = "Saving ${rec.name} (${i + 1}/${records.size})…"
                     )
                 }
                 val decRes = ImgVaultEngine.decryptImageRecord(context, file, key, rec)
@@ -676,14 +741,27 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
+            if (deleteFromVaultAfterExport && exported > 0) {
+                ImgVaultEngine.markDeleted(file, key, selectedIds)
+            }
+
             _uiState.update {
                 it.copy(
                     isProcessing = false,
                     selectedImageIds = emptySet(),
                     isMultiSelectActive = false,
-                    statusMessage = "✓ Exported $exported images to Pictures/IMGVault folder.",
-                    snackbarMessage = "Exported $exported images to phone gallery (Pictures/IMGVault)"
+                    statusMessage = if (deleteFromVaultAfterExport)
+                        "✓ Moved $exported images to Pictures/IMGVault (deleted from vault)."
+                    else
+                        "✓ Copied $exported images to Pictures/IMGVault.",
+                    snackbarMessage = if (deleteFromVaultAfterExport)
+                        "Moved $exported images to phone gallery and deleted from vault"
+                    else
+                        "Copied $exported images to phone gallery (Pictures/IMGVault)"
                 )
+            }
+            if (deleteFromVaultAfterExport) {
+                loadVaultData(file, key)
             }
         }
     }
@@ -877,6 +955,17 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleGridView() {
         _uiState.update { it.copy(isGridView = !it.isGridView) }
+    }
+
+    fun startMultiSelect(id: String) {
+        val current = _uiState.value.selectedImageIds.toMutableSet()
+        current.add(id)
+        _uiState.update {
+            it.copy(
+                selectedImageIds = current,
+                isMultiSelectActive = true
+            )
+        }
     }
 
     fun toggleSelectImage(id: String) {

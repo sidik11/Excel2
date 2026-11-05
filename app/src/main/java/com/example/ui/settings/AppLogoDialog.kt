@@ -75,6 +75,7 @@ fun AppLogoDialog(
             DisguisePreset("Notes", "Private Memo Pad", Icons.Default.NoteAlt, Color(0xFFF57F17)),
             DisguisePreset("Weather", "Forecast & Radar", Icons.Default.Cloud, Color(0xFF0288D1)),
             DisguisePreset("Clock", "Alarm & Timer", Icons.Default.Schedule, Color(0xFF5E35B1)),
+            DisguisePreset("Compass", "Navigation & Sensors", Icons.Default.Explore, Color(0xFF00796B)),
             DisguisePreset("Music", "Audio Player", Icons.Default.MusicNote, Color(0xFFD81B60))
         )
     }
@@ -94,6 +95,7 @@ fun AppLogoDialog(
                         currentLogoBitmap = bmp
                         SettingsManager.setCustomAppLogoTimestamp(System.currentTimeMillis())
                         SettingsManager.setLauncherDisguise("Custom")
+                        SettingsManager.setLauncherDisguisePreset("CUSTOM")
                         SettingsManager.setLauncherCustomIconUri(uri.toString())
                         Toast.makeText(context, "Custom icon image set successfully!", Toast.LENGTH_SHORT).show()
                     }
@@ -311,6 +313,7 @@ fun AppLogoDialog(
                                         currentLogoBitmap = null
                                         SettingsManager.setCustomAppLogoTimestamp(System.currentTimeMillis())
                                         SettingsManager.setLauncherDisguise(preset.name)
+                                        SettingsManager.setLauncherDisguisePreset(preset.name.uppercase())
                                         SettingsManager.setLauncherCustomIconUri("")
                                         Toast.makeText(context, "Disguise set to ${preset.name}", Toast.LENGTH_SHORT).show()
                                     } catch (e: Throwable) {
@@ -369,6 +372,7 @@ fun AppLogoDialog(
                                 currentLogoBitmap = null
                                 SettingsManager.setCustomAppLogoTimestamp(System.currentTimeMillis())
                                 SettingsManager.setLauncherDisguise("Excel")
+                                SettingsManager.setLauncherDisguisePreset("EXCEL")
                                 SettingsManager.setLauncherCustomIconUri("")
                                 Toast.makeText(context, "Restored default Excel disguise", Toast.LENGTH_SHORT).show()
                             } catch (e: Throwable) {

@@ -22,10 +22,16 @@ import android.os.Vibrator
 import android.os.VibrationEffect
 import android.os.Build
 
+import com.example.util.FlipToPanicDetector
+import android.view.KeyEvent
+
 class MainActivity : FragmentActivity() {
 
     private var backgroundTimestamp = 0L
     private var shakeDetector: ShakeDetector? = null
+    private var flipToPanicDetector: FlipToPanicDetector? = null
+    private var lastVolumeClickTime = 0L
+    private var volumeClickCount = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,16 +47,15 @@ class MainActivity : FragmentActivity() {
         shakeDetector = ShakeDetector(this) {
             val settings = SettingsManager.settings.value
             if (settings.shakeToLockEnabled) {
-                // Vibrate feedback on shake lock
-                try {
-                    val vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        vibrator?.vibrate(VibrationEffect.createOneShot(150, VibrationEffect.DEFAULT_AMPLITUDE))
-                    } else {
-                        @Suppress("DEPRECATION")
-                        vibrator?.vibrate(150)
-                    }
-                } catch (_: Throwable) {}
+                vibratePanic()
+                PanicModeController.triggerPanic()
+            }
+        }
+
+        flipToPanicDetector = FlipToPanicDetector(this) {
+            val settings = SettingsManager.settings.value
+            if (settings.flipToPanicEnabled) {
+                vibratePanic()
                 PanicModeController.triggerPanic()
             }
         }
@@ -94,12 +99,52 @@ class MainActivity : FragmentActivity() {
     override fun onResume() {
         super.onResume()
         shakeDetector?.start()
+        flipToPanicDetector?.start()
         FirebaseBridgeManager.init(this)
     }
 
     override fun onPause() {
         super.onPause()
         shakeDetector?.stop()
+        flipToPanicDetector?.stop()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val keyCode = event.keyCode
+            if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                val settings = SettingsManager.settings.value
+                if (settings.volumeButtonPanicEnabled) {
+                    val now = System.currentTimeMillis()
+                    if (now - lastVolumeClickTime < 650L) {
+                        volumeClickCount++
+                        if (volumeClickCount >= 2) {
+                            volumeClickCount = 0
+                            lastVolumeClickTime = 0L
+                            vibratePanic()
+                            PanicModeController.triggerPanic()
+                            return true
+                        }
+                    } else {
+                        volumeClickCount = 1
+                        lastVolumeClickTime = now
+                    }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
+    }
+
+    private fun vibratePanic() {
+        try {
+            val vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(VibrationEffect.createOneShot(180, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(180)
+            }
+        } catch (_: Throwable) {}
     }
 
     override fun onStop() {

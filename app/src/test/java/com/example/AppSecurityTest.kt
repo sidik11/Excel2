@@ -405,4 +405,187 @@ class AppSecurityTest {
         val refreshedList = com.example.util.SsiManager.importedImages.value
         assertEquals("Refreshed list must preserve custom order", initialFirstName, refreshedList.last().name)
     }
+
+    @Test
+    fun testFingerprintDatSavesAndRestoresAllSettingsCategories() {
+        // Ensure SettingsManager is initialized
+        com.example.util.SettingsManager.init(context)
+
+        // Ensure user profile exists so fingerprint registration is permitted
+        val testProfile = com.example.data.local.UserProfile(
+            fullName = "Settings Tester",
+            dateOfBirth = "15-05-1995",
+            phoneNumber = "+1 555-4321",
+            emailId = "tester@example.com",
+            device = "Pixel 9 Pro",
+            village = "CyberCity",
+            district = "Metropolis",
+            state = "NeoState",
+            country = "USA",
+            pincode = "94043",
+            profileImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            googleEmail = "tester.settings@gmail.com",
+            googleDisplayName = "Settings Tester",
+            googleId = "google_id_test_settings",
+            isGoogleConnected = true
+        )
+        com.example.util.ProfileManager.saveProfile(context, testProfile)
+        AppSecurityManager.set6DigitPin(context, "987654")
+
+        // 1. Configure custom settings across all 6 categories:
+        // Category 1: Panic Mode & Emergency Controls
+        com.example.util.SettingsManager.setShakeToLockEnabled(true)
+        com.example.util.SettingsManager.setShakeToLockDurationSeconds(2.5f)
+        com.example.util.SettingsManager.setFlipToPanicEnabled(true)
+        com.example.util.SettingsManager.setVolumeButtonPanicEnabled(true)
+        val fakePanicImage = File(AppStorageHelper.getSecurityDir(context), "panic_custom_disguise.jpg")
+        fakePanicImage.writeText("FAKE_CUSTOM_PANIC_IMAGE_DATA")
+        com.example.util.SettingsManager.setPanicCustomImageUri(fakePanicImage.absolutePath)
+        com.example.util.ActivityLogManager.log(context, "TEST_PANIC", "Test Log", "Audit log entry before backup", severity = "INFO")
+
+        // Category 2: Storage & Low RAM Architecture
+        com.example.util.SettingsManager.setUseInternalStorageReplaceRam(false)
+        com.example.util.SettingsManager.setDedicatedMediaFolderEnabled(true)
+        com.example.util.SettingsManager.setCleanExVaultOnLock(true)
+        com.example.util.SettingsManager.setDirectFolderAccess(false)
+        com.example.util.SettingsManager.setLowRamMode(false)
+
+        // Category 3: Gallery & Grid Customization
+        com.example.util.SettingsManager.setGridColumns(4)
+        com.example.util.SettingsManager.setImageFitMode("crop")
+        com.example.util.SettingsManager.setShowFileInfoOverlay(false)
+        com.example.util.SettingsManager.setHapticFeedback(false)
+        com.example.util.SettingsManager.setHighContrastBorders(false)
+
+        // Category 4: Theme Appearance
+        com.example.util.SettingsManager.setTheme(com.example.data.AppTheme.CRIMSON_NIGHT)
+        com.example.util.SettingsManager.setCustomAccentColor("AMBER")
+
+        // Category 5: Slideshow & Playback
+        com.example.util.SettingsManager.setSlideshowSpeedMs(2500L)
+        com.example.util.SettingsManager.setFastForwardSpeedMs(500L)
+        com.example.util.SettingsManager.setSlideshowTransition("zoom")
+        com.example.util.SettingsManager.setSlideshowLoop(false)
+        com.example.util.SettingsManager.setSraSlideshowIntervalSeconds(3.5f)
+        com.example.util.SettingsManager.setSraAutoLoop(false)
+        com.example.util.SettingsManager.setSsiSlideshowIntervalSeconds(4.0f)
+        com.example.util.SettingsManager.setSsiAutoLoop(false)
+        com.example.util.SettingsManager.setSsiStreamQuality("ULTRA_FAST")
+        com.example.util.SettingsManager.setDualVaultSlideshowIntervalSeconds(5)
+
+        // Category 6: App Customization & Display
+        com.example.util.SettingsManager.setUiAnimationSpeed("RELAXED")
+        com.example.util.SettingsManager.setDefaultStartTab("VAULT")
+        com.example.util.SettingsManager.setHighQualityRendering(true)
+        com.example.util.SettingsManager.setShowStorageStatsHeader(false)
+        com.example.util.SettingsManager.setAutoLockTimeoutMinutes(5)
+        com.example.util.SettingsManager.setThumbnailQuality("original")
+        com.example.util.SettingsManager.setLauncherDisguisePreset("CALCULATOR")
+        com.example.util.SettingsManager.setRnameSequencePrefix("Photo_")
+        com.example.util.SettingsManager.setRnamePaddingDigits(4)
+        com.example.util.SettingsManager.setRnameStartNumber(10)
+        com.example.util.SettingsManager.setRnameConfirmBeforeRename(true)
+
+        // 2. Register fingerprint credential to generate fingerprint.dat
+        val (regOk, regMsg) = AppSecurityManager.registerFingerprintCredential(context)
+        assertTrue("Fingerprint registration should succeed: $regMsg", regOk)
+
+        val fpDir = AppStorageHelper.getFingerprintDir(context)
+        val datFile = File(fpDir, "fingerprint.dat")
+        assertTrue("fingerprint.dat must exist", datFile.exists())
+        val datContent = datFile.readText()
+
+        // 3. Verify fingerprint.dat contents for all categories
+        assertTrue("fingerprint.dat must contain SETTINGS_JSON", datContent.contains("SETTINGS_JSON="))
+        assertTrue("fingerprint.dat must contain SHAKE_TO_LOCK_ENABLED=true", datContent.contains("SHAKE_TO_LOCK_ENABLED=true"))
+        assertTrue("fingerprint.dat must contain SHAKE_TO_LOCK_DURATION=2.5", datContent.contains("SHAKE_TO_LOCK_DURATION=2.5"))
+        assertTrue("fingerprint.dat must contain FLIP_TO_PANIC_ENABLED=true", datContent.contains("FLIP_TO_PANIC_ENABLED=true"))
+        assertTrue("fingerprint.dat must contain VOLUME_BUTTON_PANIC_ENABLED=true", datContent.contains("VOLUME_BUTTON_PANIC_ENABLED=true"))
+        assertTrue("fingerprint.dat must contain PANIC_IMAGE_BASE64", datContent.contains("PANIC_IMAGE_BASE64="))
+        assertTrue("fingerprint.dat must contain ACTIVITY_LOGS_BASE64", datContent.contains("ACTIVITY_LOGS_BASE64="))
+        assertTrue("fingerprint.dat must contain GRID_COLUMNS=4", datContent.contains("GRID_COLUMNS=4"))
+        assertTrue("fingerprint.dat must contain IMAGE_FIT_MODE=crop", datContent.contains("IMAGE_FIT_MODE=crop"))
+        assertTrue("fingerprint.dat must contain THEME=CRIMSON_NIGHT", datContent.contains("THEME=CRIMSON_NIGHT"))
+        assertTrue("fingerprint.dat must contain CUSTOM_ACCENT_COLOR=AMBER", datContent.contains("CUSTOM_ACCENT_COLOR=AMBER"))
+        assertTrue("fingerprint.dat must contain SLIDESHOW_SPEED_MS=2500", datContent.contains("SLIDESHOW_SPEED_MS=2500"))
+        assertTrue("fingerprint.dat must contain FAST_FORWARD_SPEED_MS=500", datContent.contains("FAST_FORWARD_SPEED_MS=500"))
+        assertTrue("fingerprint.dat must contain SLIDESHOW_TRANSITION=zoom", datContent.contains("SLIDESHOW_TRANSITION=zoom"))
+        assertTrue("fingerprint.dat must contain SLIDESHOW_LOOP=false", datContent.contains("SLIDESHOW_LOOP=false"))
+        assertTrue("fingerprint.dat must contain SRA_INTERVAL=3.5", datContent.contains("SRA_INTERVAL=3.5"))
+        assertTrue("fingerprint.dat must contain SRA_AUTO_LOOP=false", datContent.contains("SRA_AUTO_LOOP=false"))
+        assertTrue("fingerprint.dat must contain SSI_INTERVAL=4.0", datContent.contains("SSI_INTERVAL=4.0"))
+        assertTrue("fingerprint.dat must contain SSI_AUTO_LOOP=false", datContent.contains("SSI_AUTO_LOOP=false"))
+        assertTrue("fingerprint.dat must contain SSI_STREAM_QUALITY=ULTRA_FAST", datContent.contains("SSI_STREAM_QUALITY=ULTRA_FAST"))
+        assertTrue("fingerprint.dat must contain DUAL_VAULT_INTERVAL=5", datContent.contains("DUAL_VAULT_INTERVAL=5"))
+        assertTrue("fingerprint.dat must contain UI_ANIMATION_SPEED=RELAXED", datContent.contains("UI_ANIMATION_SPEED=RELAXED"))
+        assertTrue("fingerprint.dat must contain DEFAULT_START_TAB=VAULT", datContent.contains("DEFAULT_START_TAB=VAULT"))
+        assertTrue("fingerprint.dat must contain AUTO_LOCK_TIMEOUT_MINUTES=5", datContent.contains("AUTO_LOCK_TIMEOUT_MINUTES=5"))
+        assertTrue("fingerprint.dat must contain THUMBNAIL_QUALITY=original", datContent.contains("THUMBNAIL_QUALITY=original"))
+        assertTrue("fingerprint.dat must contain LAUNCHER_DISGUISE_PRESET=CALCULATOR", datContent.contains("LAUNCHER_DISGUISE_PRESET=CALCULATOR"))
+
+        // 4. Simulate a completely wiped / factory-reset device or new installation
+        // Reset settings to defaults
+        com.example.util.SettingsManager.restoreSettingsFromJson(com.example.util.SettingsManager.settingsToJson(com.example.data.AppSettings()))
+        fakePanicImage.delete()
+        assertFalse("Fake panic image should be deleted", fakePanicImage.exists())
+        assertEquals(3, com.example.util.SettingsManager.settings.value.gridColumns)
+        assertEquals(com.example.data.AppTheme.CYBER_PURPLE, com.example.util.SettingsManager.settings.value.theme)
+
+        // 5. Restore from fingerprint.dat
+        val (unlockOk, unlockMsg) = AppSecurityManager.verifyAndUnlockWithBackupFingerprintContent(context, datContent)
+        assertTrue("Unlock with backup fingerprint should succeed: $unlockMsg", unlockOk)
+
+        // 6. Verify identical restoration across all 6 categories
+        val restored = com.example.util.SettingsManager.settings.value
+        // Panic Mode & Emergency Controls
+        assertTrue("shakeToLockEnabled restored", restored.shakeToLockEnabled)
+        assertEquals(2.5f, restored.shakeToLockDurationSeconds, 0.01f)
+        assertTrue("flipToPanicEnabled restored", restored.flipToPanicEnabled)
+        assertTrue("volumeButtonPanicEnabled restored", restored.volumeButtonPanicEnabled)
+        assertTrue("Custom panic wallpaper image re-created", fakePanicImage.exists())
+        assertEquals("FAKE_CUSTOM_PANIC_IMAGE_DATA", fakePanicImage.readText())
+
+        // Storage & Low RAM
+        assertFalse("useInternalStorageReplaceRam restored", restored.useInternalStorageReplaceRam)
+        assertTrue("dedicatedMediaFolderEnabled restored", restored.dedicatedMediaFolderEnabled)
+        assertTrue("cleanExVaultOnLock restored", restored.cleanExVaultOnLock)
+        assertFalse("isDirectFolderAccess restored", restored.isDirectFolderAccess)
+        assertFalse("isLowRamMode restored", restored.isLowRamMode)
+
+        // Gallery & Grid
+        assertEquals(4, restored.gridColumns)
+        assertEquals("crop", restored.imageFitMode)
+        assertFalse(restored.showFileInfoOverlay)
+        assertFalse(restored.hapticFeedback)
+        assertFalse(restored.highContrastBorders)
+
+        // Theme Appearance
+        assertEquals(com.example.data.AppTheme.CRIMSON_NIGHT, restored.theme)
+        assertEquals("AMBER", restored.customAccentColor)
+
+        // Slideshow & Playback
+        assertEquals(2500L, restored.slideshowSpeedMs)
+        assertEquals(500L, restored.fastForwardSpeedMs)
+        assertEquals("zoom", restored.slideshowTransition)
+        assertFalse(restored.slideshowLoop)
+        assertEquals(3.5f, restored.sraSlideshowIntervalSeconds, 0.01f)
+        assertFalse(restored.sraAutoLoop)
+        assertEquals(4.0f, restored.ssiSlideshowIntervalSeconds, 0.01f)
+        assertFalse(restored.ssiAutoLoop)
+        assertEquals("ULTRA_FAST", restored.ssiStreamQuality)
+        assertEquals(5, restored.dualVaultSlideshowIntervalSeconds)
+
+        // App Customization & Display
+        assertEquals("RELAXED", restored.uiAnimationSpeed)
+        assertEquals("VAULT", restored.defaultStartTab)
+        assertTrue(restored.highQualityRendering)
+        assertFalse(restored.showStorageStatsHeader)
+        assertEquals(5, restored.autoLockTimeoutMinutes)
+        assertEquals("original", restored.thumbnailQuality)
+        assertEquals("CALCULATOR", restored.launcherDisguisePreset)
+        assertEquals("Photo_", restored.rnameSequencePrefix)
+        assertEquals(4, restored.rnamePaddingDigits)
+        assertEquals(10, restored.rnameStartNumber)
+        assertTrue(restored.rnameConfirmBeforeRename)
+    }
 }

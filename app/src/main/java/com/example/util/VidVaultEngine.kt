@@ -591,6 +591,145 @@ object VidVaultEngine {
     }
 
     /**
+     * Streams a decrypted/staged video [sourceFile] directly into an unlocked .vidvault container
+     * using a fixed 64 KB buffer (for direct APS Vault-to-Vault receiving with ultra-low RAM).
+     */
+    suspend fun importVideoFromFile(
+        context: Context,
+        vaultFile: File,
+        masterKey: SecretKeySpec,
+        sourceFile: File,
+        displayName: String,
+        mimeType: String = "video/mp4",
+        durationHintMs: Long = 0L,
+        targetFolderId: String? = null
+    ): VidVaultResult<VidVaultMetadata> = withContext(Dispatchers.IO) {
+        try {
+            if (!sourceFile.exists() || sourceFile.length() <= 0L) {
+                return@withContext VidVaultResult.Error("Incoming video file is empty or missing.")
+            }
+            val currentMetadata = readMetadataDirect(vaultFile, masterKey)
+                ?: return@withContext VidVaultResult.Error("Could not read video vault index.")
+
+            val remainingCapacity = currentMetadata.maxCapacityBytes - currentMetadata.totalUsedBytes
+            if (sourceFile.length() > remainingCapacity) {
+                return@withContext VidVaultResult.Error("Insufficient VID Vault capacity for $displayName.")
+            }
+
+            val targetFolder = targetFolderId ?: currentMetadata.folders.firstOrNull()?.id
+            val sourceUri = Uri.fromFile(sourceFile)
+            val (thumbBytes, detectedDuration) = extractVideoThumbnailAndDuration(context, sourceUri)
+            val finalDuration = if (detectedDuration > 0L) detectedDuration else durationHintMs
+            val (thumbIv, thumbCipher) = if (thumbBytes.isNotEmpty()) {
+                encryptGcmBlock(thumbBytes, masterKey)
+            } else {
+                ByteArray(GCM_IV_LEN) to ByteArray(0)
+            }
+
+            val readBuffer = ByteArray(STREAM_BUFFER_SIZE)
+            val cipherBuffer = ByteArray(STREAM_BUFFER_SIZE + 32)
+
+            RandomAccessFile(vaultFile, "rw").use { raf ->
+                raf.seek(HEADER_INDEX_POINTER_OFFSET)
+                val ptrBytes = ByteArray(8)
+                raf.readFully(ptrBytes)
+                val oldIndexOffset = ByteBuffer.wrap(ptrBytes).order(ByteOrder.LITTLE_ENDIAN).long
+
+                val recordId = UUID.randomUUID().toString()
+                val recordStartOffset = oldIndexOffset
+                val videoDataStartOffset = recordStartOffset + RECORD_HEADER_SIZE
+
+                val ctrIv = ByteArray(CTR_IV_LEN).also { secureRandom.nextBytes(it) }
+                val cipher = Cipher.getInstance("AES/CTR/NoPadding")
+                cipher.init(Cipher.ENCRYPT_MODE, masterKey, IvParameterSpec(ctrIv))
+
+                raf.seek(videoDataStartOffset)
+                var videoBytesWritten = 0L
+                sourceFile.inputStream().use { input ->
+                    while (true) {
+                        val bytesRead = input.read(readBuffer)
+                        if (bytesRead == -1) break
+                        if (bytesRead > 0) {
+                            val encLen = cipher.update(readBuffer, 0, bytesRead, cipherBuffer, 0)
+                            if (encLen > 0) {
+                                raf.write(cipherBuffer, 0, encLen)
+                                videoBytesWritten += encLen
+                            }
+                        }
+                    }
+                    val finalBytes = cipher.doFinal()
+                    if (finalBytes != null && finalBytes.isNotEmpty()) {
+                        raf.write(finalBytes)
+                        videoBytesWritten += finalBytes.size
+                    }
+                }
+
+                if (thumbCipher.isNotEmpty()) {
+                    raf.write(thumbCipher)
+                }
+
+                val recordEndOffset = raf.filePointer
+                val recordTotalLen = recordEndOffset - recordStartOffset
+
+                raf.seek(recordStartOffset)
+                val recHeaderBuf = ByteBuffer.allocate(RECORD_HEADER_SIZE).order(ByteOrder.LITTLE_ENDIAN)
+                recHeaderBuf.putInt(MAGIC_RECORD)
+                recHeaderBuf.put(recordId.padEnd(36, ' ').toByteArray(StandardCharsets.US_ASCII))
+                recHeaderBuf.putInt(0)
+                recHeaderBuf.put(ctrIv)
+                recHeaderBuf.putLong(videoBytesWritten)
+                recHeaderBuf.putInt(if (thumbCipher.isNotEmpty()) 1 else 0)
+                recHeaderBuf.put(thumbIv)
+                recHeaderBuf.putInt(thumbCipher.size)
+                raf.write(recHeaderBuf.array())
+
+                val newRecord = VidVaultRecord(
+                    id = recordId,
+                    folderId = targetFolder,
+                    name = displayName,
+                    sizeBytes = videoBytesWritten,
+                    durationMs = finalDuration,
+                    mimeType = mimeType.ifBlank { "video/mp4" },
+                    createdAt = System.currentTimeMillis(),
+                    recordOffset = recordStartOffset,
+                    recordLength = recordTotalLen,
+                    videoDataOffset = videoDataStartOffset,
+                    videoDataLength = videoBytesWritten,
+                    isDeleted = false,
+                    hasThumbnail = thumbCipher.isNotEmpty()
+                )
+                cacheDecryptedThumbnail(context, recordId, thumbBytes)
+
+                val updatedMetadata = currentMetadata.copy(
+                    records = currentMetadata.records + newRecord,
+                    totalUsedBytes = currentMetadata.totalUsedBytes + videoBytesWritten,
+                    updatedAt = System.currentTimeMillis()
+                )
+                val indexJson = serializeMetadata(updatedMetadata).toByteArray(StandardCharsets.UTF_8)
+                val (indexIv, indexCipher) = encryptGcmBlock(indexJson, masterKey)
+
+                raf.seek(recordEndOffset)
+                val indexBuf = ByteBuffer.allocate(GCM_IV_LEN + 4 + indexCipher.size).order(ByteOrder.LITTLE_ENDIAN)
+                indexBuf.put(indexIv)
+                indexBuf.putInt(indexCipher.size)
+                indexBuf.put(indexCipher)
+                raf.write(indexBuf.array())
+
+                raf.seek(HEADER_INDEX_POINTER_OFFSET)
+                val updateBuf = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN)
+                updateBuf.putLong(recordEndOffset)
+                updateBuf.putLong(indexBuf.array().size.toLong())
+                updateBuf.putLong(updatedMetadata.totalUsedBytes)
+                raf.write(updateBuf.array())
+
+                VidVaultResult.Success(updatedMetadata)
+            }
+        } catch (e: Throwable) {
+            VidVaultResult.Error("APS video ingest failed: ${e.message}", e)
+        }
+    }
+
+    /**
      * Creates a zero-RAM direct disk streaming [MediaDataSource] for instant playback and seeking
      * straight out of the encrypted .vidvault container without decrypting to RAM or copying the video.
      */

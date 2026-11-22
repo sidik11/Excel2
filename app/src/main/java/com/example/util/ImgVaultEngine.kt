@@ -312,6 +312,13 @@ object ImgVaultEngine {
         }
     }
 
+    suspend fun readMetadata(
+        vaultFile: File,
+        masterKey: SecretKeySpec
+    ): ImgVaultMetadata? = withContext(Dispatchers.IO) {
+        readMetadataDirect(vaultFile, masterKey)
+    }
+
     /**
      * Imports an image into the vault with streaming encryption and low RAM thumbnail generation.
      */
@@ -553,6 +560,66 @@ object ImgVaultEngine {
             }
         } catch (e: Throwable) {
             ImgVaultResult.Error("Batch import failed: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Imports a staged image file directly into an unlocked .vault container
+     * (used by APS Vault-to-Vault receiver so images go straight into IMG Vault).
+     */
+    suspend fun importImageFromFile(
+        context: Context,
+        vaultFile: File,
+        masterKey: SecretKeySpec,
+        sourceFile: File,
+        displayName: String,
+        mimeType: String = "image/jpeg",
+        targetFolderId: String? = null
+    ): ImgVaultResult<ImgVaultMetadata> = withContext(Dispatchers.IO) {
+        try {
+            if (!sourceFile.exists() || sourceFile.length() <= 0L) {
+                return@withContext ImgVaultResult.Error("Incoming image file is empty or missing.")
+            }
+            val currentMetadata = readMetadataDirect(vaultFile, masterKey)
+                ?: return@withContext ImgVaultResult.Error("Could not read vault index.")
+
+            val remainingCapacity = currentMetadata.maxCapacityBytes - currentMetadata.totalUsedBytes
+            if (sourceFile.length() > remainingCapacity) {
+                return@withContext ImgVaultResult.Error("Insufficient IMG Vault capacity for $displayName.")
+            }
+
+            val targetFolder = targetFolderId ?: currentMetadata.folders.firstOrNull()?.id
+            val thumbBytes = generateDownscaledThumbnail(context, Uri.fromFile(sourceFile))
+            val (thumbIv, thumbCipher) = encryptBlock(thumbBytes, masterKey)
+
+            val rawBytes = sourceFile.readBytes()
+            val (imgIv, imgCipher) = encryptBlock(rawBytes, masterKey)
+
+            val recordId = UUID.randomUUID().toString()
+            val record = ImgVaultRecord(
+                id = recordId,
+                folderId = targetFolder,
+                name = displayName,
+                sizeBytes = sourceFile.length().coerceAtLeast(imgCipher.size.toLong()),
+                mimeType = mimeType.ifBlank { "image/jpeg" },
+                createdAt = System.currentTimeMillis(),
+                isDeleted = false,
+                hasThumbnail = thumbCipher.isNotEmpty()
+            )
+            val updatedMetadata = writeRecordAndCommit(
+                vaultFile = vaultFile,
+                masterKey = masterKey,
+                currentMetadata = currentMetadata,
+                record = record,
+                imgIv = imgIv,
+                imgCipher = imgCipher,
+                thumbIv = thumbIv,
+                thumbCipher = thumbCipher
+            )
+            cacheDecryptedThumbnail(context, recordId, thumbBytes)
+            ImgVaultResult.Success(updatedMetadata)
+        } catch (e: Throwable) {
+            ImgVaultResult.Error("APS image ingest failed: ${e.message}", e)
         }
     }
 

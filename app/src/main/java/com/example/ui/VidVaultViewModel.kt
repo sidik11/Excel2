@@ -13,6 +13,10 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.util.AppStorageHelper
+import com.example.util.ApsReceiverVaultTarget
+import com.example.util.ApsTransferEngine
+import com.example.util.ApsTransferItem
+import com.example.util.ApsVaultType
 import com.example.util.EncryptedVideoDataSource
 import com.example.util.SettingsManager
 import com.example.util.VaultContainerInfo
@@ -482,6 +486,9 @@ class VidVaultViewModel(application: Application) : AndroidViewModel(application
 
     fun lockVault() {
         val ctx = getApplication<Application>()
+        if (ApsTransferEngine.state.value.activeReceiveVaultType == ApsVaultType.VID_VAULT) {
+            ApsTransferEngine.stopReceiveMode()
+        }
         activeMasterKey = null
         activeMetadata = null
         allLoadedVideos = emptyList()
@@ -503,6 +510,9 @@ class VidVaultViewModel(application: Application) : AndroidViewModel(application
 
     fun lockAndClearSession() {
         val ctx = getApplication<Application>()
+        if (ApsTransferEngine.state.value.activeReceiveVaultType == ApsVaultType.VID_VAULT) {
+            ApsTransferEngine.stopReceiveMode()
+        }
         VidVaultSessionManager.clearSession(ctx)
         activeMasterKey = null
         activeMetadata = null
@@ -1015,4 +1025,58 @@ class VidVaultViewModel(application: Application) : AndroidViewModel(application
     fun dismissRecoveryKeyDialog() = _uiState.update { it.copy(showRecoveryKeyDialog = false, generatedRecoveryKey = null) }
     fun clearError() = _uiState.update { it.copy(errorMessage = null) }
     fun clearSnackbar() = _uiState.update { it.copy(snackbarMessage = null) }
+
+    // ---- APS (Direct Vault-to-Vault High-Security Transfer) ----
+
+    fun buildApsItemsForSelected(): List<ApsTransferItem> {
+        val file = activeVaultFile ?: return emptyList()
+        val key = activeMasterKey ?: return emptyList()
+        val meta = activeMetadata ?: return emptyList()
+        val ids = _uiState.value.selectedVideoIds
+        if (ids.isEmpty()) return emptyList()
+
+        return meta.activeRecords.filter { ids.contains(it.id) }.map { rec ->
+            ApsTransferItem(
+                id = rec.id,
+                name = rec.name,
+                sizeBytes = rec.sizeBytes,
+                mimeType = rec.mimeType,
+                durationMs = rec.durationMs,
+                vaultType = ApsVaultType.VID_VAULT,
+                streamPlaintextTo = { outStream ->
+                    VidVaultEngine.streamDecryptVideoToOutputStream(
+                        vaultFile = file,
+                        masterKey = key,
+                        record = rec,
+                        outputStream = outStream
+                    ) is VidVaultResult.Success
+                }
+            )
+        }
+    }
+
+    fun getApsReceiverTarget(): ApsReceiverVaultTarget? {
+        val file = activeVaultFile ?: return null
+        val key = activeMasterKey ?: return null
+        return ApsReceiverVaultTarget(
+            vaultType = ApsVaultType.VID_VAULT,
+            vaultFile = file,
+            masterKey = key,
+            targetFolderId = _uiState.value.selectedFolderId,
+            onIngestComplete = { reloadUnlockedVaultFromDisk() }
+        )
+    }
+
+    fun reloadUnlockedVaultFromDisk() {
+        val file = activeVaultFile ?: return
+        val key = activeMasterKey ?: return
+        viewModelScope.launch {
+            val updated = VidVaultEngine.readMetadata(file, key)
+            if (updated != null) {
+                loadVideosForCurrentVault(updated, file, key)
+                scanAvailableVaults()
+                _uiState.update { it.copy(snackbarMessage = "VID Vault updated with received APS videos!") }
+            }
+        }
+    }
 }

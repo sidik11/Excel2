@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.LockReset
+import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -126,7 +127,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
+import com.example.ui.components.ApsTransferModal
 import com.example.ui.components.VaultModalViewer
+import com.example.util.ApsTransferEngine
+import com.example.util.ApsTransferItem
+import com.example.util.ApsVaultType
 import com.example.util.ImgVaultEngine
 import com.example.util.VaultImage
 import com.example.util.VaultSortMode
@@ -155,6 +160,9 @@ fun VaultScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var showAddImagesChoiceDialog by remember { mutableStateOf(false) }
+    var showApsModal by remember { mutableStateOf(false) }
+    var apsItemsToSend by remember { mutableStateOf<List<ApsTransferItem>>(emptyList()) }
+    val apsState by ApsTransferEngine.state.collectAsStateWithLifecycle()
 
     // Batch media picker (Storage Access Framework: up to 500 images at once without 100 limit)
     val batchImagePickerLauncher = rememberLauncherForActivityResult(
@@ -253,6 +261,11 @@ fun VaultScreen(
             } else {
                 VaultUnlockedHeaderActions(
                     uiState = uiState,
+                    isApsReceiveActive = apsState.isReceiveEnabled && apsState.activeReceiveVaultType == ApsVaultType.IMG_VAULT,
+                    onOpenApsReceive = {
+                        apsItemsToSend = emptyList()
+                        showApsModal = true
+                    },
                     onLock = { viewModel.lockVault() },
                     onLockAndClear = { viewModel.lockAndClearSession() },
                     onInfo = { viewModel.openVaultInfoDialog() },
@@ -337,6 +350,12 @@ fun VaultScreen(
                     onOpenDeleteConfirm = { viewModel.openDeleteConfirmDialog() },
                     onOpenFolderAction = { viewModel.openFolderActionDialog() },
                     onOpenMobileStorage = { viewModel.openMobileStorageDialog() },
+                    onOpenApsSend = {
+                        apsItemsToSend = viewModel.buildApsItemsForSelected()
+                        if (apsItemsToSend.isNotEmpty()) {
+                            showApsModal = true
+                        }
+                    },
                     onShareSelected = { viewModel.shareSelectedImages(context) },
                     onOpenCreateFolder = { viewModel.openCreateFolderDialog() },
                     onSelectFolder = { folderId -> viewModel.setFolder(folderId) },
@@ -368,6 +387,23 @@ fun VaultScreen(
                 onToggleSlideshow = { viewModel.toggleSlideshow() },
                 onTogglePause = { viewModel.togglePause() },
                 onImportToSsi = { image -> viewModel.importImageToSsi(image) }
+            )
+        }
+
+        // APS Vault-to-Vault Modal (IMG Vault Only — auto-pops on incoming IMG Vault requests!)
+        val incomingImgRequest = apsState.pendingIncomingRequest != null && apsState.activeReceiveVaultType == ApsVaultType.IMG_VAULT
+        if (uiState.isUnlocked && (showApsModal || incomingImgRequest)) {
+            ApsTransferModal(
+                vaultType = ApsVaultType.IMG_VAULT,
+                itemsToSend = apsItemsToSend,
+                receiverTargetProvider = { viewModel.getApsReceiverTarget() },
+                onTransferSuccess = {
+                    viewModel.clearSelection()
+                },
+                onClose = {
+                    showApsModal = false
+                    apsItemsToSend = emptyList()
+                }
             )
         }
 
@@ -746,6 +782,8 @@ private fun VaultLockedControls(
 @Composable
 private fun VaultUnlockedHeaderActions(
     uiState: VaultUiState,
+    isApsReceiveActive: Boolean,
+    onOpenApsReceive: () -> Unit,
     onLock: () -> Unit,
     onLockAndClear: () -> Unit,
     onInfo: () -> Unit,
@@ -790,6 +828,35 @@ private fun VaultUnlockedHeaderActions(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isApsReceiveActive) VaultSuccess.copy(alpha = 0.22f) else VaultAccent.copy(alpha = 0.25f),
+                    border = BorderStroke(1.dp, if (isApsReceiveActive) VaultSuccess else VaultCyan),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onOpenApsReceive)
+                        .testTag("img_vault_aps_receive_btn")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Radar,
+                            contentDescription = "IMG Vault APS Receive",
+                            tint = if (isApsReceiveActive) VaultSuccess else VaultCyan,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = if (isApsReceiveActive) "APS ON" else "APS",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isApsReceiveActive) VaultSuccess else VaultCyan
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(2.dp))
                 IconButton(onClick = onCompact, modifier = Modifier.size(32.dp).testTag("btn_compact_vault")) {
                     Icon(Icons.Default.Tune, contentDescription = "Compact Vault", tint = VaultCyan, modifier = Modifier.size(16.dp))
                 }
@@ -963,6 +1030,7 @@ private fun UnlockedGalleryView(
     onOpenDeleteConfirm: () -> Unit,
     onOpenFolderAction: () -> Unit,
     onOpenMobileStorage: () -> Unit,
+    onOpenApsSend: () -> Unit,
     onShareSelected: () -> Unit,
     onOpenCreateFolder: () -> Unit,
     onSelectFolder: (String?) -> Unit,
@@ -1153,19 +1221,32 @@ private fun UnlockedGalleryView(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Action Buttons Row: Vault Folder (Move/Copy) | Phone Export (Move/Copy) | Delete
+                    // Action Buttons Row: APS | Vault Folder | Phone Export | Delete
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // 0. APS Direct Vault-to-Vault Transfer
+                        Button(
+                            onClick = onOpenApsSend,
+                            colors = ButtonDefaults.buttonColors(containerColor = VaultAccent, contentColor = Color.White),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp).testTag("img_vault_aps_send_btn")
+                        ) {
+                            Icon(Icons.Default.Radar, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("APS", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+
                         // 1. Move/Copy to Vault Folder
                         Button(
                             onClick = onOpenFolderAction,
                             colors = ButtonDefaults.buttonColors(containerColor = VaultCyan, contentColor = Color.Black),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.weight(1.1f).height(32.dp).testTag("btn_vault_folder_action")
+                            modifier = Modifier.height(32.dp).testTag("btn_vault_folder_action")
                         ) {
                             Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
@@ -1178,7 +1259,7 @@ private fun UnlockedGalleryView(
                             colors = ButtonDefaults.buttonColors(containerColor = VaultSuccess, contentColor = Color.Black),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.weight(1.1f).height(32.dp).testTag("btn_mobile_storage_action")
+                            modifier = Modifier.height(32.dp).testTag("btn_mobile_storage_action")
                         ) {
                             Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
@@ -1191,7 +1272,7 @@ private fun UnlockedGalleryView(
                             colors = ButtonDefaults.buttonColors(containerColor = VaultDanger, contentColor = Color.White),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.weight(0.9f).height(32.dp).testTag("btn_delete_selected")
+                            modifier = Modifier.height(32.dp).testTag("btn_delete_selected")
                         ) {
                             Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))

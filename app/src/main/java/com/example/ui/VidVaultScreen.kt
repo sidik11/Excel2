@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
@@ -111,8 +112,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.ui.components.ApsTransferModal
 import com.example.ui.components.VidVaultPlayerModal
 import com.example.ui.components.formatDurationMs
+import com.example.util.ApsTransferEngine
+import com.example.util.ApsTransferItem
+import com.example.util.ApsVaultType
 import com.example.util.SettingsManager
 import com.example.util.VaultSortMode
 import com.example.util.VaultVideo
@@ -135,6 +140,9 @@ fun VidVaultScreen(
     var vaultDropdownExpanded by remember { mutableStateOf(false) }
     var sortDropdownExpanded by remember { mutableStateOf(false) }
     var importMenuExpanded by remember { mutableStateOf(false) }
+    var showApsModal by remember { mutableStateOf(false) }
+    var apsItemsToSend by remember { mutableStateOf<List<ApsTransferItem>>(emptyList()) }
+    val apsState by ApsTransferEngine.state.collectAsStateWithLifecycle()
 
     // All-format Video File Picker (SAF OpenMultipleDocuments: mp4, mkv, mov, avi, webm, 3gp, flv, ts, etc.)
     val allFormatVideoPicker = rememberLauncherForActivityResult(
@@ -233,7 +241,39 @@ fun VidVaultScreen(
                         }
 
                         if (uiState.isUnlocked) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                val isVidApsReceiving = apsState.isReceiveEnabled && apsState.activeReceiveVaultType == ApsVaultType.VID_VAULT
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isVidApsReceiving) Color(0xFF00B894).copy(alpha = 0.22f) else Color(0xFF6C5CE7).copy(alpha = 0.2f),
+                                    border = BorderStroke(1.dp, if (isVidApsReceiving) Color(0xFF00B894) else Color(0xFF00CEC9)),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            apsItemsToSend = emptyList()
+                                            showApsModal = true
+                                        }
+                                        .testTag("vid_vault_aps_receive_btn")
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Radar,
+                                            contentDescription = "APS Receive",
+                                            tint = if (isVidApsReceiving) Color(0xFF00B894) else Color(0xFF00CEC9),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (isVidApsReceiving) "APS ON" else "APS",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isVidApsReceiving) Color(0xFF00B894) else Color(0xFF00CEC9)
+                                        )
+                                    }
+                                }
                                 IconButton(
                                     onClick = { viewModel.setVaultInfoDialogOpen(true) },
                                     modifier = Modifier.testTag("vid_vault_info_btn")
@@ -719,6 +759,21 @@ fun VidVaultScreen(
                                     Text("Phone", fontSize = 11.sp)
                                 }
                                 Button(
+                                    onClick = {
+                                        apsItemsToSend = viewModel.buildApsItemsForSelected()
+                                        if (apsItemsToSend.isNotEmpty()) {
+                                            showApsModal = true
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7), contentColor = Color.White),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.testTag("vid_vault_aps_send_btn")
+                                ) {
+                                    Icon(Icons.Default.Radar, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("APS", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Button(
                                     onClick = { viewModel.shareSelectedVideos(context) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00CEC9), contentColor = Color.Black),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -834,6 +889,23 @@ fun VidVaultScreen(
                 onClose = { viewModel.closePlayerModal() },
                 onNext = { viewModel.nextVideo() },
                 onPrevious = { viewModel.previousVideo() }
+            )
+        }
+
+        // APS Vault-to-Vault Modal (VID Vault Only — auto-pops on incoming VID Vault requests!)
+        val incomingVidRequest = apsState.pendingIncomingRequest != null && apsState.activeReceiveVaultType == ApsVaultType.VID_VAULT
+        if (uiState.isUnlocked && (showApsModal || incomingVidRequest)) {
+            ApsTransferModal(
+                vaultType = ApsVaultType.VID_VAULT,
+                itemsToSend = apsItemsToSend,
+                receiverTargetProvider = { viewModel.getApsReceiverTarget() },
+                onTransferSuccess = {
+                    viewModel.clearSelection()
+                },
+                onClose = {
+                    showApsModal = false
+                    apsItemsToSend = emptyList()
+                }
             )
         }
     }

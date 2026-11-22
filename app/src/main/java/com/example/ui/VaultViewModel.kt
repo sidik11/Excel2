@@ -12,6 +12,10 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.util.AppStorageHelper
+import com.example.util.ApsReceiverVaultTarget
+import com.example.util.ApsTransferEngine
+import com.example.util.ApsTransferItem
+import com.example.util.ApsVaultType
 import com.example.util.ImgVaultEngine
 import com.example.util.ImgVaultFolder
 import com.example.util.ImgVaultMetadata
@@ -467,6 +471,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun lockVault() {
         val context = getApplication<Application>()
+        if (ApsTransferEngine.state.value.activeReceiveVaultType == ApsVaultType.IMG_VAULT) {
+            ApsTransferEngine.stopReceiveMode()
+        }
         activeMasterKey = null
         VaultSessionManager.clearSession(context)
         slideshowJob?.cancel()
@@ -996,6 +1003,91 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearSnackbar() {
         clearSnackbarMessage()
+    }
+
+    // ---- APS (Direct Vault-to-Vault High-Security Transfer for IMG Vault) ----
+
+    fun buildApsItemsForSelected(): List<ApsTransferItem> {
+        val context = getApplication<Application>()
+        val file = _uiState.value.selectedVaultFile ?: return emptyList()
+        val key = activeMasterKey ?: return emptyList()
+        val meta = _uiState.value.metadata ?: return emptyList()
+        val ids = _uiState.value.selectedImageIds
+        if (ids.isEmpty()) return emptyList()
+
+        return meta.activeRecords.filter { ids.contains(it.id) }.map { rec ->
+            ApsTransferItem(
+                id = rec.id,
+                name = rec.name,
+                sizeBytes = rec.sizeBytes,
+                mimeType = rec.mimeType,
+                vaultType = ApsVaultType.IMG_VAULT,
+                streamPlaintextTo = { outStream ->
+                    when (val dec = ImgVaultEngine.decryptImageRecord(context, file, key, rec)) {
+                        is ImgVaultResult.Success -> {
+                            try {
+                                val buf = ByteArray(64 * 1024)
+                                FileInputStream(dec.data).use { fis ->
+                                    while (true) {
+                                        val r = fis.read(buf)
+                                        if (r == -1) break
+                                        outStream.write(buf, 0, r)
+                                    }
+                                }
+                                true
+                            } catch (_: Throwable) {
+                                false
+                            } finally {
+                                try { dec.data.delete() } catch (_: Throwable) {}
+                            }
+                        }
+                        is ImgVaultResult.Error -> false
+                    }
+                }
+            )
+        }
+    }
+
+    fun getApsReceiverTarget(): ApsReceiverVaultTarget? {
+        val file = _uiState.value.selectedVaultFile ?: return null
+        val key = activeMasterKey ?: return null
+        return ApsReceiverVaultTarget(
+            vaultType = ApsVaultType.IMG_VAULT,
+            vaultFile = file,
+            masterKey = key,
+            targetFolderId = _uiState.value.currentFolderId,
+            onIngestComplete = { refreshUnlockedVaultAfterAps() }
+        )
+    }
+
+    fun refreshUnlockedVaultAfterAps() {
+        val context = getApplication<Application>()
+        val file = _uiState.value.selectedVaultFile ?: return
+        val key = activeMasterKey ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val meta = ImgVaultEngine.readMetadata(file, key) ?: return@launch
+            val vaultImages = meta.activeRecords.map { rec ->
+                val thumbFile = ImgVaultEngine.getThumbnail(context, file, key, rec)
+                VaultImage(
+                    id = rec.id,
+                    name = rec.name,
+                    file = thumbFile ?: file,
+                    sizeBytes = rec.sizeBytes,
+                    folderId = rec.folderId,
+                    createdAt = rec.createdAt,
+                    mimeType = rec.mimeType,
+                    thumbnailFile = thumbFile
+                )
+            }
+            _uiState.update {
+                it.copy(
+                    metadata = meta,
+                    folders = meta.folders,
+                    images = vaultImages,
+                    snackbarMessage = "IMG Vault updated with received APS images!"
+                )
+            }
+        }
     }
 
     override fun onCleared() {

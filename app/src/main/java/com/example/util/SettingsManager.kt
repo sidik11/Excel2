@@ -65,6 +65,11 @@ object SettingsManager {
     private const val KEY_VOLUME_BUTTON_PANIC = "key_volume_button_panic"
     private const val KEY_LAUNCHER_PRESET = "key_launcher_preset"
     private const val KEY_SSI_STREAM_QUALITY = "key_ssi_stream_quality"
+    private const val KEY_KEEP_VID_VAULT_OPEN = "key_keep_vid_vault_open"
+    private const val KEY_VID_VAULT_DIRECT_STREAM = "key_vid_vault_direct_stream"
+    private const val KEY_VID_VAULT_AUTO_PLAY = "key_vid_vault_auto_play"
+    private const val KEY_VID_VAULT_LOOP = "key_vid_vault_loop"
+    private const val KEY_VID_VAULT_SPEED = "key_vid_vault_speed"
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -168,7 +173,12 @@ object SettingsManager {
             flipToPanicEnabled = p.getBoolean(KEY_FLIP_TO_PANIC, true),
             volumeButtonPanicEnabled = p.getBoolean(KEY_VOLUME_BUTTON_PANIC, true),
             launcherDisguisePreset = p.getString(KEY_LAUNCHER_PRESET, "EXCEL") ?: "EXCEL",
-            ssiStreamQuality = p.getString(KEY_SSI_STREAM_QUALITY, "ULTRA_FAST") ?: "ULTRA_FAST"
+            ssiStreamQuality = p.getString(KEY_SSI_STREAM_QUALITY, "ULTRA_FAST") ?: "ULTRA_FAST",
+            keepVidVaultUnlockedAcrossRestarts = p.getBoolean(KEY_KEEP_VID_VAULT_OPEN, true),
+            vidVaultDirectDiskStream = p.getBoolean(KEY_VID_VAULT_DIRECT_STREAM, true),
+            vidVaultAutoPlay = p.getBoolean(KEY_VID_VAULT_AUTO_PLAY, true),
+            vidVaultLoopPlayback = p.getBoolean(KEY_VID_VAULT_LOOP, false),
+            vidVaultDefaultPlaybackSpeed = p.getFloat(KEY_VID_VAULT_SPEED, 1.0f)
         )
     }
 
@@ -442,6 +452,32 @@ object SettingsManager {
         _settings.value = _settings.value.copy(ssiStreamQuality = quality)
     }
 
+    // VID Vault Settings
+    fun setKeepVidVaultUnlockedAcrossRestarts(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_KEEP_VID_VAULT_OPEN, enabled)?.apply()
+        _settings.value = _settings.value.copy(keepVidVaultUnlockedAcrossRestarts = enabled)
+    }
+
+    fun setVidVaultDirectDiskStream(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_VID_VAULT_DIRECT_STREAM, enabled)?.apply()
+        _settings.value = _settings.value.copy(vidVaultDirectDiskStream = enabled)
+    }
+
+    fun setVidVaultAutoPlay(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_VID_VAULT_AUTO_PLAY, enabled)?.apply()
+        _settings.value = _settings.value.copy(vidVaultAutoPlay = enabled)
+    }
+
+    fun setVidVaultLoopPlayback(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_VID_VAULT_LOOP, enabled)?.apply()
+        _settings.value = _settings.value.copy(vidVaultLoopPlayback = enabled)
+    }
+
+    fun setVidVaultDefaultPlaybackSpeed(speed: Float) {
+        prefs?.edit()?.putFloat(KEY_VID_VAULT_SPEED, speed)?.apply()
+        _settings.value = _settings.value.copy(vidVaultDefaultPlaybackSpeed = speed)
+    }
+
     /**
      * Serializes complete settings into a JSON representation for fingerprint.dat backup.
      */
@@ -501,6 +537,11 @@ object SettingsManager {
             put("volumeButtonPanicEnabled", s.volumeButtonPanicEnabled)
             put("launcherDisguisePreset", s.launcherDisguisePreset)
             put("ssiStreamQuality", s.ssiStreamQuality)
+            put("keepVidVaultUnlockedAcrossRestarts", s.keepVidVaultUnlockedAcrossRestarts)
+            put("vidVaultDirectDiskStream", s.vidVaultDirectDiskStream)
+            put("vidVaultAutoPlay", s.vidVaultAutoPlay)
+            put("vidVaultLoopPlayback", s.vidVaultLoopPlayback)
+            put("vidVaultDefaultPlaybackSpeed", s.vidVaultDefaultPlaybackSpeed.toDouble())
         }
     }
 
@@ -568,6 +609,11 @@ object SettingsManager {
         if (json.has("volumeButtonPanicEnabled")) editor.putBoolean(KEY_VOLUME_BUTTON_PANIC, json.optBoolean("volumeButtonPanicEnabled", true))
         if (json.has("launcherDisguisePreset")) editor.putString(KEY_LAUNCHER_PRESET, json.optString("launcherDisguisePreset", "EXCEL"))
         if (json.has("ssiStreamQuality")) editor.putString(KEY_SSI_STREAM_QUALITY, json.optString("ssiStreamQuality", "ULTRA_FAST"))
+        if (json.has("keepVidVaultUnlockedAcrossRestarts")) editor.putBoolean(KEY_KEEP_VID_VAULT_OPEN, json.optBoolean("keepVidVaultUnlockedAcrossRestarts", true))
+        if (json.has("vidVaultDirectDiskStream")) editor.putBoolean(KEY_VID_VAULT_DIRECT_STREAM, json.optBoolean("vidVaultDirectDiskStream", true))
+        if (json.has("vidVaultAutoPlay")) editor.putBoolean(KEY_VID_VAULT_AUTO_PLAY, json.optBoolean("vidVaultAutoPlay", true))
+        if (json.has("vidVaultLoopPlayback")) editor.putBoolean(KEY_VID_VAULT_LOOP, json.optBoolean("vidVaultLoopPlayback", false))
+        if (json.has("vidVaultDefaultPlaybackSpeed")) editor.putFloat(KEY_VID_VAULT_SPEED, json.optDouble("vidVaultDefaultPlaybackSpeed", 1.0).toFloat())
 
         editor.apply()
         loadSettings()
@@ -635,6 +681,11 @@ object SettingsManager {
         props["VOLUME_BUTTON_PANIC_ENABLED"]?.let { editor.putBoolean(KEY_VOLUME_BUTTON_PANIC, it.toBoolean()) }
         props["LAUNCHER_DISGUISE_PRESET"]?.let { editor.putString(KEY_LAUNCHER_PRESET, it) }
         props["SSI_STREAM_QUALITY"]?.let { editor.putString(KEY_SSI_STREAM_QUALITY, it) }
+        props["KEEP_VID_VAULT_OPEN"]?.let { editor.putBoolean(KEY_KEEP_VID_VAULT_OPEN, it.toBoolean()) }
+        props["VID_VAULT_DIRECT_STREAM"]?.let { editor.putBoolean(KEY_VID_VAULT_DIRECT_STREAM, it.toBoolean()) }
+        props["VID_VAULT_AUTO_PLAY"]?.let { editor.putBoolean(KEY_VID_VAULT_AUTO_PLAY, it.toBoolean()) }
+        props["VID_VAULT_LOOP"]?.let { editor.putBoolean(KEY_VID_VAULT_LOOP, it.toBoolean()) }
+        props["VID_VAULT_SPEED"]?.toFloatOrNull()?.let { editor.putFloat(KEY_VID_VAULT_SPEED, it) }
 
         editor.apply()
         loadSettings()

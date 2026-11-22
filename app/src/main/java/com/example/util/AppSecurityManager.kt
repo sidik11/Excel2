@@ -606,6 +606,11 @@ object AppSecurityManager {
             appendLine("RNAME_PADDING=${appSettings.rnamePaddingDigits}")
             appendLine("RNAME_START_NUM=${appSettings.rnameStartNumber}")
             appendLine("RNAME_CONFIRM=${appSettings.rnameConfirmBeforeRename}")
+            appendLine("KEEP_VID_VAULT_OPEN=${appSettings.keepVidVaultUnlockedAcrossRestarts}")
+            appendLine("VID_VAULT_DIRECT_STREAM=${appSettings.vidVaultDirectDiskStream}")
+            appendLine("VID_VAULT_AUTO_PLAY=${appSettings.vidVaultAutoPlay}")
+            appendLine("VID_VAULT_LOOP=${appSettings.vidVaultLoopPlayback}")
+            appendLine("VID_VAULT_SPEED=${appSettings.vidVaultDefaultPlaybackSpeed}")
 
             val dvSession = FirebaseBridgeManager.currentSession.value
             if (dvSession.code.isNotBlank()) {
@@ -920,7 +925,12 @@ object AppSecurityManager {
                 "RNAME_PREFIX=" to appSet.rnameSequencePrefix,
                 "RNAME_PADDING=" to appSet.rnamePaddingDigits.toString(),
                 "RNAME_START_NUM=" to appSet.rnameStartNumber.toString(),
-                "RNAME_CONFIRM=" to appSet.rnameConfirmBeforeRename.toString()
+                "RNAME_CONFIRM=" to appSet.rnameConfirmBeforeRename.toString(),
+                "KEEP_VID_VAULT_OPEN=" to appSet.keepVidVaultUnlockedAcrossRestarts.toString(),
+                "VID_VAULT_DIRECT_STREAM=" to appSet.vidVaultDirectDiskStream.toString(),
+                "VID_VAULT_AUTO_PLAY=" to appSet.vidVaultAutoPlay.toString(),
+                "VID_VAULT_LOOP=" to appSet.vidVaultLoopPlayback.toString(),
+                "VID_VAULT_SPEED=" to appSet.vidVaultDefaultPlaybackSpeed.toString()
             )
 
             settingsMap.forEach { (prefix, value) ->

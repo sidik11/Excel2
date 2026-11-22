@@ -132,6 +132,21 @@ object AppStorageHelper {
     fun getImgVaultDir(context: Context): File = getVaultStorageDir(context)
 
     /**
+     * VID Vault uses the exact same storage directory as IMG Vault (.vidvault containers).
+     */
+    fun getVidVaultDir(context: Context): File = getVaultStorageDir(context)
+
+    /**
+     * Disk-backed temporary cache directory for VID Vault share/export/fallback streaming
+     * so RAM is never burdened by large video files.
+     */
+    fun getVidVaultTempDir(context: Context): File {
+        val dir = File(context.cacheDir, "vid_vault_temp")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    /**
      * Dedicated public folder for encrypted archives in Android/media/<packageName>/encrypt.
      * This is the only folder visible in external file managers for app media,
      * protecting all user media with the App Lock password.

@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.Visibility
@@ -987,6 +988,227 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // SECTION 1B: 🎬 VID Vault Settings & Zero-RAM Storage
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, Color(0xFF00CEC9).copy(alpha = 0.6f)),
+            modifier = Modifier.fillMaxWidth().testTag("section_vid_vault_settings")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Movie, contentDescription = null, tint = Color(0xFF00CEC9))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "🎬 VID Vault Settings & Low-RAM Engine",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Color(0xFF00CEC9)
+                        )
+                    }
+                    Surface(
+                        color = Color(0xFF00CEC9).copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "30 GB MAX",
+                            color = Color(0xFF00CEC9),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Keep VID Vault Unlocked Across Restarts
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Keep VID Vault Open Until Manual Lock", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Stay unlocked while switching tabs until you explicitly tap Lock or Lock & Clear.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.keepVidVaultUnlockedAcrossRestarts,
+                        onCheckedChange = {
+                            SettingsManager.setKeepVidVaultUnlockedAcrossRestarts(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00CEC9)),
+                        modifier = Modifier.testTag("toggle_keep_vid_vault_unlocked")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Zero-RAM Direct Disk-Stream Playback
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Direct Disk-Stream Playback (Ultra-Low RAM)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Streams & decrypts 64 KB chunks directly from storage without loading videos into RAM or copying files.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.vidVaultDirectDiskStream,
+                        onCheckedChange = {
+                            SettingsManager.setVidVaultDirectDiskStream(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00CEC9)),
+                        modifier = Modifier.testTag("toggle_vid_vault_direct_stream")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Auto-Play on Open
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Auto-Play Video in Player Modal", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Start playback automatically as soon as you tap any video inside VID Vault.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.vidVaultAutoPlay,
+                        onCheckedChange = {
+                            SettingsManager.setVidVaultAutoPlay(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00CEC9)),
+                        modifier = Modifier.testTag("toggle_vid_vault_autoplay")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Loop Video Playback
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Loop Video Playback by Default", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Continuously repeat the current video until paused or closed.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.vidVaultLoopPlayback,
+                        onCheckedChange = {
+                            SettingsManager.setVidVaultLoopPlayback(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00CEC9)),
+                        modifier = Modifier.testTag("toggle_vid_vault_loop")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Default Video Playback Speed
+                Text("Default Video Playback Speed:", fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Spacer(modifier = Modifier.height(6.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)) { spd ->
+                        FilterChip(
+                            selected = settings.vidVaultDefaultPlaybackSpeed == spd,
+                            onClick = {
+                                SettingsManager.setVidVaultDefaultPlaybackSpeed(spd)
+                                AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                            },
+                            label = { Text("${spd}x", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF00CEC9),
+                                selectedLabelColor = Color.Black
+                            ),
+                            modifier = Modifier.testTag("chip_vid_speed_$spd")
+                        )
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Shared Storage Location Info
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("VID Vault Storage Location (Same as IMG Vault):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00CEC9))
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "${AppStorageHelper.getVidVaultDir(context).path}/",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Wipe VID Vault Cache
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Wipe VID Vault Cache & Temp Files", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Clears temporary shared/buffered video files and video thumbnails from cache.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            com.example.util.VidVaultEngine.clearDecryptedCache(context)
+                            Toast.makeText(context, "VID Vault temporary cache & thumbnails wiped!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("btn_clear_vid_vault_cache")
+                    ) {
+                        Text("Wipe Cache", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

@@ -86,6 +86,7 @@ enum class MainAppTab {
 fun MainScreen(
     viewModel: MainViewModel = viewModel(),
     vaultViewModel: VaultViewModel = viewModel(),
+    vidVaultViewModel: VidVaultViewModel = viewModel(),
     sshowViewModel: SShowViewModel = viewModel(),
     sraViewModel: SraViewModel = viewModel(),
     ssiViewModel: SsiViewModel = viewModel(),
@@ -94,6 +95,7 @@ fun MainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val vaultUiState by vaultViewModel.uiState.collectAsStateWithLifecycle()
+    val vidVaultUiState by vidVaultViewModel.uiState.collectAsStateWithLifecycle()
     val securityConfig by AppSecurityManager.securityConfig.collectAsStateWithLifecycle()
     val dualSession by FirebaseBridgeManager.currentSession.collectAsStateWithLifecycle()
     val userProfile by ProfileManager.userProfile.collectAsStateWithLifecycle()
@@ -152,6 +154,13 @@ fun MainScreen(
         vaultUiState.snackbarMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
             vaultViewModel.clearSnackbar()
+        }
+    }
+
+    LaunchedEffect(vidVaultUiState.snackbarMessage) {
+        vidVaultUiState.snackbarMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            vidVaultViewModel.clearSnackbar()
         }
     }
 
@@ -241,7 +250,7 @@ fun MainScreen(
                             .testTag("nav_image_vault_tab")
                     ) {
                         Text(
-                            text = "🖼️ IMG Vault",
+                            text = "🔐 Vault",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isVault) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
@@ -438,8 +447,9 @@ fun MainScreen(
                 }
 
                 MainAppTab.IMAGE_VAULT -> {
-                    VaultScreen(
-                        viewModel = vaultViewModel,
+                    VaultHubScreen(
+                        vaultViewModel = vaultViewModel,
+                        vidVaultViewModel = vidVaultViewModel,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -484,6 +494,7 @@ fun MainScreen(
                         onRestoreComplete = {
                             viewModel.reloadPersistedData()
                             vaultViewModel.reloadSession()
+                            vidVaultViewModel.reloadSession()
                             sshowViewModel.checkStoredImages()
                         },
                         onOpenDualVault = {

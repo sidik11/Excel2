@@ -68,5 +68,11 @@ data class AppSettings(
     val launcherDisguisePreset: String = "EXCEL", // "EXCEL", "CALCULATOR", "NOTES", "COMPASS", "CLOCK", "WEATHER", "MUSIC", "CUSTOM"
     val ssiStreamQuality: String = "ULTRA_FAST", // "ULTRA_FAST", "BALANCED", "ORIGINAL"
     val highQualityRendering: Boolean = true,
-    val showStorageStatsHeader: Boolean = true
+    val showStorageStatsHeader: Boolean = true,
+    // VID Vault Settings (30 GB Max, Zero-RAM Direct Storage Architecture)
+    val keepVidVaultUnlockedAcrossRestarts: Boolean = true,
+    val vidVaultDirectDiskStream: Boolean = true,
+    val vidVaultAutoPlay: Boolean = true,
+    val vidVaultLoopPlayback: Boolean = false,
+    val vidVaultDefaultPlaybackSpeed: Float = 1.0f
 )

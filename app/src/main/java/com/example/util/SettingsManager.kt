@@ -70,6 +70,17 @@ object SettingsManager {
     private const val KEY_VID_VAULT_AUTO_PLAY = "key_vid_vault_auto_play"
     private const val KEY_VID_VAULT_LOOP = "key_vid_vault_loop"
     private const val KEY_VID_VAULT_SPEED = "key_vid_vault_speed"
+    private const val KEY_VID_VAULT_SW_FALLBACK = "key_vid_vault_sw_fallback"
+    private const val KEY_VID_VAULT_SURFACE_MODE = "key_vid_vault_surface_mode"
+    private const val KEY_VID_VAULT_ASPECT_MODE = "key_vid_vault_aspect_mode"
+    private const val KEY_VID_VAULT_KEEP_SCREEN_ON = "key_vid_vault_keep_screen_on"
+    private const val KEY_APS_PREFERRED_TRANSPORT = "key_aps_preferred_transport"
+    private const val KEY_APS_AUTO_STOP_ON_LOCK = "key_aps_auto_stop_on_lock"
+    private const val KEY_APS_AUTO_SHOW_PROMPT = "key_aps_auto_show_prompt"
+    private const val KEY_APS_BUFFER_KB = "key_aps_buffer_kb"
+    private const val KEY_UI_LAYOUT_SCALE = "key_ui_layout_scale"
+    private const val KEY_ADAPTIVE_GRID_COLS = "key_adaptive_grid_cols"
+    private const val KEY_COMPACT_TOP_TABS = "key_compact_top_tabs"
 
     private val _settings = MutableStateFlow(AppSettings())
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
@@ -178,7 +189,18 @@ object SettingsManager {
             vidVaultDirectDiskStream = p.getBoolean(KEY_VID_VAULT_DIRECT_STREAM, true),
             vidVaultAutoPlay = p.getBoolean(KEY_VID_VAULT_AUTO_PLAY, true),
             vidVaultLoopPlayback = p.getBoolean(KEY_VID_VAULT_LOOP, false),
-            vidVaultDefaultPlaybackSpeed = p.getFloat(KEY_VID_VAULT_SPEED, 1.0f)
+            vidVaultDefaultPlaybackSpeed = p.getFloat(KEY_VID_VAULT_SPEED, 1.0f),
+            vidVaultSoftwareDecoderFallback = p.getBoolean(KEY_VID_VAULT_SW_FALLBACK, true),
+            vidVaultVideoSurfaceMode = p.getString(KEY_VID_VAULT_SURFACE_MODE, "SURFACE_VIEW") ?: "SURFACE_VIEW",
+            vidVaultDefaultAspectMode = p.getString(KEY_VID_VAULT_ASPECT_MODE, "FIT") ?: "FIT",
+            vidVaultKeepScreenOn = p.getBoolean(KEY_VID_VAULT_KEEP_SCREEN_ON, true),
+            apsPreferredTransport = p.getString(KEY_APS_PREFERRED_TRANSPORT, "BOTH") ?: "BOTH",
+            apsAutoStopOnLock = p.getBoolean(KEY_APS_AUTO_STOP_ON_LOCK, true),
+            apsAutoShowIncomingPrompt = p.getBoolean(KEY_APS_AUTO_SHOW_PROMPT, true),
+            apsTransferBufferKb = p.getInt(KEY_APS_BUFFER_KB, 64),
+            uiLayoutScaleMode = p.getString(KEY_UI_LAYOUT_SCALE, "AUTO") ?: "AUTO",
+            adaptiveGridColumnsByScreenWidth = p.getBoolean(KEY_ADAPTIVE_GRID_COLS, true),
+            compactTopTabs = p.getBoolean(KEY_COMPACT_TOP_TABS, false)
         )
     }
 
@@ -478,6 +500,64 @@ object SettingsManager {
         _settings.value = _settings.value.copy(vidVaultDefaultPlaybackSpeed = speed)
     }
 
+    fun setVidVaultSoftwareDecoderFallback(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_VID_VAULT_SW_FALLBACK, enabled)?.apply()
+        _settings.value = _settings.value.copy(vidVaultSoftwareDecoderFallback = enabled)
+    }
+
+    fun setVidVaultVideoSurfaceMode(mode: String) {
+        prefs?.edit()?.putString(KEY_VID_VAULT_SURFACE_MODE, mode)?.apply()
+        _settings.value = _settings.value.copy(vidVaultVideoSurfaceMode = mode)
+    }
+
+    fun setVidVaultDefaultAspectMode(mode: String) {
+        prefs?.edit()?.putString(KEY_VID_VAULT_ASPECT_MODE, mode)?.apply()
+        _settings.value = _settings.value.copy(vidVaultDefaultAspectMode = mode)
+    }
+
+    fun setVidVaultKeepScreenOn(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_VID_VAULT_KEEP_SCREEN_ON, enabled)?.apply()
+        _settings.value = _settings.value.copy(vidVaultKeepScreenOn = enabled)
+    }
+
+    // APS Vault-to-Vault Transfer Settings
+    fun setApsPreferredTransport(transport: String) {
+        prefs?.edit()?.putString(KEY_APS_PREFERRED_TRANSPORT, transport)?.apply()
+        _settings.value = _settings.value.copy(apsPreferredTransport = transport)
+    }
+
+    fun setApsAutoStopOnLock(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_APS_AUTO_STOP_ON_LOCK, enabled)?.apply()
+        _settings.value = _settings.value.copy(apsAutoStopOnLock = enabled)
+    }
+
+    fun setApsAutoShowIncomingPrompt(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_APS_AUTO_SHOW_PROMPT, enabled)?.apply()
+        _settings.value = _settings.value.copy(apsAutoShowIncomingPrompt = enabled)
+    }
+
+    fun setApsTransferBufferKb(kb: Int) {
+        val clamped = kb.coerceIn(64, 256)
+        prefs?.edit()?.putInt(KEY_APS_BUFFER_KB, clamped)?.apply()
+        _settings.value = _settings.value.copy(apsTransferBufferKb = clamped)
+    }
+
+    // Responsive Display & Accessibility Settings
+    fun setUiLayoutScaleMode(mode: String) {
+        prefs?.edit()?.putString(KEY_UI_LAYOUT_SCALE, mode)?.apply()
+        _settings.value = _settings.value.copy(uiLayoutScaleMode = mode)
+    }
+
+    fun setAdaptiveGridColumnsByScreenWidth(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_ADAPTIVE_GRID_COLS, enabled)?.apply()
+        _settings.value = _settings.value.copy(adaptiveGridColumnsByScreenWidth = enabled)
+    }
+
+    fun setCompactTopTabs(enabled: Boolean) {
+        prefs?.edit()?.putBoolean(KEY_COMPACT_TOP_TABS, enabled)?.apply()
+        _settings.value = _settings.value.copy(compactTopTabs = enabled)
+    }
+
     /**
      * Serializes complete settings into a JSON representation for fingerprint.dat backup.
      */
@@ -542,6 +622,17 @@ object SettingsManager {
             put("vidVaultAutoPlay", s.vidVaultAutoPlay)
             put("vidVaultLoopPlayback", s.vidVaultLoopPlayback)
             put("vidVaultDefaultPlaybackSpeed", s.vidVaultDefaultPlaybackSpeed.toDouble())
+            put("vidVaultSoftwareDecoderFallback", s.vidVaultSoftwareDecoderFallback)
+            put("vidVaultVideoSurfaceMode", s.vidVaultVideoSurfaceMode)
+            put("vidVaultDefaultAspectMode", s.vidVaultDefaultAspectMode)
+            put("vidVaultKeepScreenOn", s.vidVaultKeepScreenOn)
+            put("apsPreferredTransport", s.apsPreferredTransport)
+            put("apsAutoStopOnLock", s.apsAutoStopOnLock)
+            put("apsAutoShowIncomingPrompt", s.apsAutoShowIncomingPrompt)
+            put("apsTransferBufferKb", s.apsTransferBufferKb)
+            put("uiLayoutScaleMode", s.uiLayoutScaleMode)
+            put("adaptiveGridColumnsByScreenWidth", s.adaptiveGridColumnsByScreenWidth)
+            put("compactTopTabs", s.compactTopTabs)
         }
     }
 
@@ -614,6 +705,17 @@ object SettingsManager {
         if (json.has("vidVaultAutoPlay")) editor.putBoolean(KEY_VID_VAULT_AUTO_PLAY, json.optBoolean("vidVaultAutoPlay", true))
         if (json.has("vidVaultLoopPlayback")) editor.putBoolean(KEY_VID_VAULT_LOOP, json.optBoolean("vidVaultLoopPlayback", false))
         if (json.has("vidVaultDefaultPlaybackSpeed")) editor.putFloat(KEY_VID_VAULT_SPEED, json.optDouble("vidVaultDefaultPlaybackSpeed", 1.0).toFloat())
+        if (json.has("vidVaultSoftwareDecoderFallback")) editor.putBoolean(KEY_VID_VAULT_SW_FALLBACK, json.optBoolean("vidVaultSoftwareDecoderFallback", true))
+        if (json.has("vidVaultVideoSurfaceMode")) editor.putString(KEY_VID_VAULT_SURFACE_MODE, json.optString("vidVaultVideoSurfaceMode", "SURFACE_VIEW"))
+        if (json.has("vidVaultDefaultAspectMode")) editor.putString(KEY_VID_VAULT_ASPECT_MODE, json.optString("vidVaultDefaultAspectMode", "FIT"))
+        if (json.has("vidVaultKeepScreenOn")) editor.putBoolean(KEY_VID_VAULT_KEEP_SCREEN_ON, json.optBoolean("vidVaultKeepScreenOn", true))
+        if (json.has("apsPreferredTransport")) editor.putString(KEY_APS_PREFERRED_TRANSPORT, json.optString("apsPreferredTransport", "BOTH"))
+        if (json.has("apsAutoStopOnLock")) editor.putBoolean(KEY_APS_AUTO_STOP_ON_LOCK, json.optBoolean("apsAutoStopOnLock", true))
+        if (json.has("apsAutoShowIncomingPrompt")) editor.putBoolean(KEY_APS_AUTO_SHOW_PROMPT, json.optBoolean("apsAutoShowIncomingPrompt", true))
+        if (json.has("apsTransferBufferKb")) editor.putInt(KEY_APS_BUFFER_KB, json.optInt("apsTransferBufferKb", 64))
+        if (json.has("uiLayoutScaleMode")) editor.putString(KEY_UI_LAYOUT_SCALE, json.optString("uiLayoutScaleMode", "AUTO"))
+        if (json.has("adaptiveGridColumnsByScreenWidth")) editor.putBoolean(KEY_ADAPTIVE_GRID_COLS, json.optBoolean("adaptiveGridColumnsByScreenWidth", true))
+        if (json.has("compactTopTabs")) editor.putBoolean(KEY_COMPACT_TOP_TABS, json.optBoolean("compactTopTabs", false))
 
         editor.apply()
         loadSettings()
@@ -686,6 +788,17 @@ object SettingsManager {
         props["VID_VAULT_AUTO_PLAY"]?.let { editor.putBoolean(KEY_VID_VAULT_AUTO_PLAY, it.toBoolean()) }
         props["VID_VAULT_LOOP"]?.let { editor.putBoolean(KEY_VID_VAULT_LOOP, it.toBoolean()) }
         props["VID_VAULT_SPEED"]?.toFloatOrNull()?.let { editor.putFloat(KEY_VID_VAULT_SPEED, it) }
+        props["VID_VAULT_SW_FALLBACK"]?.let { editor.putBoolean(KEY_VID_VAULT_SW_FALLBACK, it.toBoolean()) }
+        props["VID_VAULT_SURFACE_MODE"]?.let { editor.putString(KEY_VID_VAULT_SURFACE_MODE, it) }
+        props["VID_VAULT_ASPECT_MODE"]?.let { editor.putString(KEY_VID_VAULT_ASPECT_MODE, it) }
+        props["VID_VAULT_KEEP_SCREEN_ON"]?.let { editor.putBoolean(KEY_VID_VAULT_KEEP_SCREEN_ON, it.toBoolean()) }
+        props["APS_PREFERRED_TRANSPORT"]?.let { editor.putString(KEY_APS_PREFERRED_TRANSPORT, it) }
+        props["APS_AUTO_STOP_ON_LOCK"]?.let { editor.putBoolean(KEY_APS_AUTO_STOP_ON_LOCK, it.toBoolean()) }
+        props["APS_AUTO_SHOW_PROMPT"]?.let { editor.putBoolean(KEY_APS_AUTO_SHOW_PROMPT, it.toBoolean()) }
+        props["APS_BUFFER_KB"]?.toIntOrNull()?.let { editor.putInt(KEY_APS_BUFFER_KB, it) }
+        props["UI_LAYOUT_SCALE"]?.let { editor.putString(KEY_UI_LAYOUT_SCALE, it) }
+        props["ADAPTIVE_GRID_COLS"]?.let { editor.putBoolean(KEY_ADAPTIVE_GRID_COLS, it.toBoolean()) }
+        props["COMPACT_TOP_TABS"]?.let { editor.putBoolean(KEY_COMPACT_TOP_TABS, it.toBoolean()) }
 
         editor.apply()
         loadSettings()

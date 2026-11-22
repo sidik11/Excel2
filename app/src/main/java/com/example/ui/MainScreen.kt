@@ -9,12 +9,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -70,6 +74,7 @@ import com.example.util.FirebaseBridgeManager
 import com.example.ui.profile.ProfileDialog
 import com.example.util.AppSecurityManager
 import com.example.util.ProfileManager
+import com.example.util.SettingsManager
 
 enum class MainAppTab {
     EXCEL_CATALOG,
@@ -99,6 +104,7 @@ fun MainScreen(
     val securityConfig by AppSecurityManager.securityConfig.collectAsStateWithLifecycle()
     val dualSession by FirebaseBridgeManager.currentSession.collectAsStateWithLifecycle()
     val userProfile by ProfileManager.userProfile.collectAsStateWithLifecycle()
+    val appSettings by SettingsManager.settings.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var currentTab by remember { mutableStateOf(MainAppTab.EXCEL_CATALOG) }
     var showManualDialog by remember { mutableStateOf(false) }
@@ -173,14 +179,20 @@ fun MainScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = WindowInsets.safeDrawing,
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
+            val isCompactPhone = maxWidth < 375.dp || appSettings.compactTopTabs || appSettings.uiLayoutScaleMode == "COMPACT"
+            val tabHPad = if (isCompactPhone) 9.dp else 12.dp
+            val tabFontSize = if (isCompactPhone) 11.sp else 12.sp
+
+            Column(modifier = Modifier.fillMaxSize()) {
             // Header Bar
             HeaderBar(
                 excelName = uiState.excelName,
@@ -199,7 +211,7 @@ fun MainScreen(
                 onOpenProfile = { showProfileDialog = true }
             )
 
-            // Top Section Switcher (Excel Catalog, IMG Vault, SShow, Settings)
+            // Top Section Switcher (Excel Catalog, Vault, SShow, More, Settings, Lock)
             Surface(
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.fillMaxWidth()
@@ -207,29 +219,32 @@ fun MainScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .padding(horizontal = if (isCompactPhone) 6.dp else 8.dp, vertical = 5.dp)
                         .background(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                             shape = RoundedCornerShape(16.dp)
                         )
                         .padding(4.dp)
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     val isExcel = currentTab == MainAppTab.EXCEL_CATALOG
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .height(36.dp)
+                            .defaultMinSize(minHeight = 38.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (isExcel) MaterialTheme.colorScheme.primary else Color.Transparent)
                             .clickable { currentTab = MainAppTab.EXCEL_CATALOG }
-                            .padding(horizontal = 12.dp)
+                            .padding(horizontal = tabHPad, vertical = 6.dp)
                             .testTag("nav_excel_catalog_tab")
                     ) {
                         Text(
                             text = "📊 Excel",
-                            fontSize = 12.sp,
+                            fontSize = tabFontSize,
+                            maxLines = 1,
+                            softWrap = false,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isExcel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -239,19 +254,21 @@ fun MainScreen(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .height(36.dp)
+                            .defaultMinSize(minHeight = 38.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(
                                 if (isVault) Brush.horizontalGradient(listOf(Color(0xFF6C5CE7), Color(0xFF00CEC9)))
                                 else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
                             )
                             .clickable { currentTab = MainAppTab.IMAGE_VAULT }
-                            .padding(horizontal = 12.dp)
+                            .padding(horizontal = tabHPad, vertical = 6.dp)
                             .testTag("nav_image_vault_tab")
                     ) {
                         Text(
                             text = "🔐 Vault",
-                            fontSize = 12.sp,
+                            fontSize = tabFontSize,
+                            maxLines = 1,
+                            softWrap = false,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isVault) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -261,19 +278,21 @@ fun MainScreen(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .height(36.dp)
+                            .defaultMinSize(minHeight = 38.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(
                                 if (isSShow) Brush.horizontalGradient(listOf(Color(0xFFFF7675), Color(0xFFFF9900)))
                                 else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
                             )
                             .clickable { currentTab = MainAppTab.SSHOW }
-                            .padding(horizontal = 12.dp)
+                            .padding(horizontal = tabHPad, vertical = 6.dp)
                             .testTag("nav_sshow_tab")
                     ) {
                         Text(
                             text = "🛡️ SShow",
-                            fontSize = 12.sp,
+                            fontSize = tabFontSize,
+                            maxLines = 1,
+                            softWrap = false,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isSShow) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -284,26 +303,28 @@ fun MainScreen(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .height(36.dp)
+                            .defaultMinSize(minHeight = 38.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(
                                 if (isMoreActive) Brush.horizontalGradient(listOf(Color(0xFF6C5CE7), Color(0xFF0984E3)))
                                 else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
                             )
                             .clickable { moreMenuExpanded = true }
-                            .padding(horizontal = 10.dp)
+                            .padding(horizontal = if (isCompactPhone) 8.dp else 10.dp, vertical = 6.dp)
                             .testTag("nav_more_tab")
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = when (currentTab) {
-                                    MainAppTab.DUAL_VAULT -> "🔗 Dual Vault"
+                                    MainAppTab.DUAL_VAULT -> "🔗 Dual"
                                     MainAppTab.SRA -> "🎬 SRA"
                                     MainAppTab.SSI -> "📸 SSI"
                                     MainAppTab.RNAME -> "🏷️ Rname"
                                     else -> "✨ More"
                                 },
-                                fontSize = 12.sp,
+                                fontSize = tabFontSize,
+                                maxLines = 1,
+                                softWrap = false,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (isMoreActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -358,16 +379,18 @@ fun MainScreen(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .height(36.dp)
+                            .defaultMinSize(minHeight = 38.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (isSettings) MaterialTheme.colorScheme.secondary else Color.Transparent)
                             .clickable { currentTab = MainAppTab.SETTINGS }
-                            .padding(horizontal = 12.dp)
+                            .padding(horizontal = tabHPad, vertical = 6.dp)
                             .testTag("nav_settings_tab")
                     ) {
                         Text(
                             text = "⚙️ Settings",
-                            fontSize = 12.sp,
+                            fontSize = tabFontSize,
+                            maxLines = 1,
+                            softWrap = false,
                             fontWeight = FontWeight.SemiBold,
                             color = if (isSettings) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -376,18 +399,20 @@ fun MainScreen(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .height(36.dp)
+                            .defaultMinSize(minHeight = 38.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.error.copy(alpha = 0.15f))
                             .clickable { AppSecurityManager.lockApp() }
-                            .padding(horizontal = 10.dp)
+                            .padding(horizontal = if (isCompactPhone) 8.dp else 10.dp, vertical = 6.dp)
                             .testTag("nav_quick_lock_app")
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(13.dp))
                             Text(
                                 text = " Lock",
-                                fontSize = 11.sp,
+                                fontSize = if (isCompactPhone) 10.sp else 11.sp,
+                                maxLines = 1,
+                                softWrap = false,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -503,6 +528,7 @@ fun MainScreen(
                         modifier = Modifier.weight(1f)
                     )
                 }
+            }
             }
         }
 

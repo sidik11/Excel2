@@ -74,5 +74,18 @@ data class AppSettings(
     val vidVaultDirectDiskStream: Boolean = true,
     val vidVaultAutoPlay: Boolean = true,
     val vidVaultLoopPlayback: Boolean = false,
-    val vidVaultDefaultPlaybackSpeed: Float = 1.0f
+    val vidVaultDefaultPlaybackSpeed: Float = 1.0f,
+    val vidVaultSoftwareDecoderFallback: Boolean = true,
+    val vidVaultVideoSurfaceMode: String = "SURFACE_VIEW", // "SURFACE_VIEW", "TEXTURE_VIEW"
+    val vidVaultDefaultAspectMode: String = "FIT", // "FIT", "FILL", "ZOOM"
+    val vidVaultKeepScreenOn: Boolean = true,
+    // APS Vault-to-Vault Transfer Settings
+    val apsPreferredTransport: String = "BOTH", // "BOTH", "WIFI_ONLY", "BLUETOOTH_ONLY"
+    val apsAutoStopOnLock: Boolean = true,
+    val apsAutoShowIncomingPrompt: Boolean = true,
+    val apsTransferBufferKb: Int = 64, // 64, 128, 256
+    // Responsive Display & Accessibility Settings
+    val uiLayoutScaleMode: String = "AUTO", // "AUTO", "COMPACT", "COMFORTABLE"
+    val adaptiveGridColumnsByScreenWidth: Boolean = true,
+    val compactTopTabs: Boolean = false
 )

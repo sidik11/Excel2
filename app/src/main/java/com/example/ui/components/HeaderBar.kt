@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -73,35 +74,45 @@ fun HeaderBar(
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
 
-    Column(
+    val settings by SettingsManager.settings.collectAsState()
+    val customLogoBitmap = remember(settings.customAppLogoTimestamp) {
+        val file = AppStorageHelper.getAppLogoFile(context)
+        if (file.exists() && file.length() > 0) {
+            try {
+                android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+            } catch (_: Throwable) {
+                null
+            }
+        } else null
+    }
+
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 20.dp, vertical = 14.dp)
     ) {
-        val settings by SettingsManager.settings.collectAsState()
-        val customLogoBitmap = remember(settings.customAppLogoTimestamp) {
-            val file = AppStorageHelper.getAppLogoFile(context)
-            if (file.exists() && file.length() > 0) {
-                try {
-                    android.graphics.BitmapFactory.decodeFile(file.absolutePath)
-                } catch (_: Throwable) {
-                    null
-                }
-            } else null
-        }
+        val isCompact = maxWidth < 380.dp || settings.uiLayoutScaleMode == "COMPACT"
+        val hPad = if (isCompact) 12.dp else 18.dp
+        val vPad = if (isCompact) 8.dp else 12.dp
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = hPad, vertical = vPad)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Surface(
                         color = AccentGreen.copy(alpha = 0.18f),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.size(if (isCompact) 28.dp else 32.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             if (customLogoBitmap != null) {
@@ -113,21 +124,22 @@ fun HeaderBar(
                                         .clip(RoundedCornerShape(8.dp))
                                 )
                             } else {
-                                Text("X", color = AccentGreen, fontWeight = FontWeight.Black, fontSize = 16.sp)
+                                Text("X", color = AccentGreen, fontWeight = FontWeight.Black, fontSize = if (isCompact) 14.sp else 16.sp)
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(if (isCompact) 8.dp else 10.dp))
                     Text(
                         text = "Excel & Image Vault",
-                        fontSize = 20.sp,
+                        fontSize = if (isCompact) 16.sp else 19.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-            }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                 // Profile icon button (side of Notification icon)
                 val userProfile = ProfileManager.userProfile.collectAsState().value
                 val profileImageBase64 = userProfile?.profileImageBase64
@@ -233,25 +245,26 @@ fun HeaderBar(
         }
 
         // Persistent Path & Offline Status Badges
-        if (excelName != null || folderName != null) {
-            Spacer(modifier = Modifier.height(10.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (excelName != null) {
-                    PermanentBadge(
-                        icon = Icons.Default.TableChart,
-                        label = "Excel: $excelName",
-                        isPermanent = isPermanentSaved
-                    )
-                }
-                if (folderName != null) {
-                    PermanentBadge(
-                        icon = Icons.Default.Folder,
-                        label = "Folder: $folderName",
-                        isPermanent = isPermanentSaved
-                    )
+            if (excelName != null || folderName != null) {
+                Spacer(modifier = Modifier.height(if (isCompact) 6.dp else 10.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (excelName != null) {
+                        PermanentBadge(
+                            icon = Icons.Default.TableChart,
+                            label = "Excel: $excelName",
+                            isPermanent = isPermanentSaved
+                        )
+                    }
+                    if (folderName != null) {
+                        PermanentBadge(
+                            icon = Icons.Default.Folder,
+                            label = "Folder: $folderName",
+                            isPermanent = isPermanentSaved
+                        )
+                    }
                 }
             }
         }

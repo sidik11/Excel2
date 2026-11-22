@@ -471,7 +471,9 @@ class VaultViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun lockVault() {
         val context = getApplication<Application>()
-        if (ApsTransferEngine.state.value.activeReceiveVaultType == ApsVaultType.IMG_VAULT) {
+        if (com.example.util.SettingsManager.settings.value.apsAutoStopOnLock &&
+            ApsTransferEngine.state.value.activeReceiveVaultType == ApsVaultType.IMG_VAULT
+        ) {
             ApsTransferEngine.stopReceiveMode()
         }
         activeMasterKey = null

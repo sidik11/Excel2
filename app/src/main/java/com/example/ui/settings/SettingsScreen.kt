@@ -6,17 +6,21 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,8 +71,10 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
@@ -159,10 +165,15 @@ fun SettingsScreen(
     var showDualVaultDialog by remember { mutableStateOf(false) }
     var showFileManagerDialog by remember { mutableStateOf(false) }
     var showActivityTimelineDialog by remember { mutableStateOf(false) }
+    var showApsHistoryDialog by remember { mutableStateOf(false) }
     var showUnpairConfirmDialog by remember { mutableStateOf(false) }
 
     val coroutineScope = rememberCoroutineScope()
     val dualVaultSession by FirebaseBridgeManager.currentSession.collectAsState()
+    val apsHistoryEntries by com.example.util.ApsTransferHistoryManager.entries.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        com.example.util.ApsTransferHistoryManager.load(context)
+    }
 
     val panicPhotoPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -193,28 +204,38 @@ fun SettingsScreen(
 
     val bioStatus = remember { AppSecurityManager.checkBiometricStatus(context) }
 
-    Column(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
-            .padding(bottom = 80.dp)
     ) {
-        // Title
-        Text(
-            text = "⚙️ App Settings & Customization",
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = "Advanced controls for security, PIN, biometric, storage, themes & playback",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        val isCompactScreen = maxWidth < 375.dp || settings.uiLayoutScaleMode == "COMPACT"
+        val outerPadH = if (isCompactScreen) 10.dp else 16.dp
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 720.dp)
+                .align(Alignment.TopCenter)
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(horizontal = outerPadH, vertical = 14.dp)
+                .padding(bottom = 84.dp)
+        ) {
+            // Title
+            Text(
+                text = "⚙️ App Settings & Customization",
+                fontSize = if (isCompactScreen) 18.sp else 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = "Advanced controls for security, VID/IMG vaults, APS transfers, display & playback",
+                fontSize = if (isCompactScreen) 11.sp else 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
 
         // SECTION 0: 🛡️ App Security & Privacy
         Surface(
@@ -1165,10 +1186,146 @@ fun SettingsScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outline)
 
-                // Shared Storage Location Info
+                // Software Decoder Fallback (Fixes Black Screen on 2nd Mobile / HEVC / 10-bit / 4K)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Software Video Decoder Fallback", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Fixes black screen on devices whose hardware decoder cannot play H.265/HEVC/HDR/4K videos transferred from another mobile.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.vidVaultSoftwareDecoderFallback,
+                        onCheckedChange = {
+                            SettingsManager.setVidVaultSoftwareDecoderFallback(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00CEC9)),
+                        modifier = Modifier.testTag("toggle_vid_vault_sw_fallback")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Video Surface Renderer Mode
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Video Surface Renderer Mode", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(
+                        "SurfaceView is fastest and fixes hardware black frames. Switch to TextureView if a specific phone GPU flickers.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            "SURFACE_VIEW" to "SurfaceView (Fast)",
+                            "TEXTURE_VIEW" to "TextureView (Compat)"
+                        ).forEach { (modeKey, label) ->
+                            val selected = settings.vidVaultVideoSurfaceMode == modeKey
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selected) Color(0xFF00CEC9).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, if (selected) Color(0xFF00CEC9) else Color.Transparent),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        SettingsManager.setVidVaultVideoSurfaceMode(modeKey)
+                                        AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                                    }
+                                    .testTag("chip_vid_surface_$modeKey")
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) Color(0xFF00CEC9) else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Default Video Aspect Mode
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Default Video Aspect Ratio", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf("FIT" to "Fit", "FILL" to "Stretch", "ZOOM" to "Crop Zoom").forEach { (modeKey, label) ->
+                            val selected = settings.vidVaultDefaultAspectMode == modeKey
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selected) Color(0xFF00CEC9).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                border = BorderStroke(1.dp, if (selected) Color(0xFF00CEC9) else Color.Transparent),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        SettingsManager.setVidVaultDefaultAspectMode(modeKey)
+                                        AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                                    }
+                                    .testTag("chip_vid_aspect_$modeKey")
+                            ) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 8.dp)) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selected) Color(0xFF00CEC9) else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Keep Screen On While Playing
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Keep Screen Awake During Playback", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Prevents screen dimming or auto-sleep while watching encrypted videos.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.vidVaultKeepScreenOn,
+                        onCheckedChange = {
+                            SettingsManager.setVidVaultKeepScreenOn(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF00CEC9)),
+                        modifier = Modifier.testTag("toggle_vid_keep_screen_on")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Storage Location (Same as IMG Vault)
                 Surface(
+                    shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
@@ -1210,6 +1367,219 @@ fun SettingsScreen(
                     ) {
                         Text("Wipe Cache", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // SECTION 1C: 📡 APS Vault-to-Vault Transfer Settings
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, Color(0xFF6C5CE7).copy(alpha = 0.6f)),
+            modifier = Modifier.fillMaxWidth().testTag("section_aps_transfer_settings")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Radar, contentDescription = null, tint = Color(0xFF6C5CE7))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "APS Vault-to-Vault Transfer Settings",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = Color(0xFF6C5CE7)
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Configure direct ECDH P-256 + AES-256 encrypted transfers over local Wi-Fi or Bluetooth.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Preferred Transport
+                Text("Default Transfer Transport", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        "BOTH" to "Wi-Fi + BT",
+                        "WIFI_ONLY" to "Wi-Fi Only",
+                        "BLUETOOTH_ONLY" to "Bluetooth"
+                    ).forEach { (key, label) ->
+                        val selected = settings.apsPreferredTransport == key
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (selected) Color(0xFF6C5CE7).copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(1.dp, if (selected) Color(0xFF6C5CE7) else Color.Transparent),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    SettingsManager.setApsPreferredTransport(key)
+                                    AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                                }
+                                .testTag("chip_aps_transport_$key")
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 8.dp)) {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) Color(0xFF6C5CE7) else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Encrypted Stream Chunk Buffer
+                Text("Transfer Chunk Buffer (RAM vs Speed)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(
+                    "64 KB uses ultra-low RAM; 256 KB boosts large 4K video transfers over fast Wi-Fi.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(64 to "64 KB", 128 to "128 KB", 256 to "256 KB").forEach { (kb, label) ->
+                        val selected = settings.apsTransferBufferKb == kb
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (selected) Color(0xFF00CEC9).copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(1.dp, if (selected) Color(0xFF00CEC9) else Color.Transparent),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    SettingsManager.setApsTransferBufferKb(kb)
+                                    AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                                }
+                                .testTag("chip_aps_buffer_$kb")
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 8.dp)) {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) Color(0xFF00CEC9) else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Auto-Stop APS Receive on Lock
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Auto-Stop APS Receive on Vault Lock", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Immediately closes local APS discovery & ports when you lock IMG or VID Vault.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.apsAutoStopOnLock,
+                        onCheckedChange = {
+                            SettingsManager.setApsAutoStopOnLock(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF6C5CE7)),
+                        modifier = Modifier.testTag("toggle_aps_auto_stop_lock")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                // Auto-Open Incoming APS Prompt
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Auto-Open Incoming Transfer Prompt", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Automatically opens the 6-digit SAS verification prompt when another device sends files.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.apsAutoShowIncomingPrompt,
+                        onCheckedChange = {
+                            SettingsManager.setApsAutoShowIncomingPrompt(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color(0xFF6C5CE7)),
+                        modifier = Modifier.testTag("toggle_aps_auto_prompt")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                // View All APS Transfer History
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("APS Transfer History", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            text = if (apsHistoryEntries.isEmpty()) {
+                                "View all sent & received IMG/VID Vault transfers with peer photos and status."
+                            } else {
+                                "${apsHistoryEntries.size} transfer(s) recorded • View peer details, file names & SHA-256 status."
+                            },
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = { showApsHistoryDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C5CE7), contentColor = Color.White),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("btn_view_aps_transfer_history")
+                    ) {
+                        Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("History", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF6C5CE7).copy(alpha = 0.1f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "🔒 Strict Vault Isolation Active: VID Vault sends ONLY to VID Vault, and IMG Vault sends ONLY to IMG Vault. Cross-vault connections are cryptographically rejected.",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(10.dp)
+                    )
                 }
             }
         }
@@ -1832,6 +2202,126 @@ fun SettingsScreen(
                         onCheckedChange = { SettingsManager.setHighContrastBorders(it) },
                         colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier.testTag("toggle_high_contrast_borders")
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // SECTION 3B: 📱 Responsive Display & Multi-Device UI
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
+            modifier = Modifier.fillMaxWidth().testTag("section_responsive_ui_settings")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AspectRatio, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Responsive Display & Multi-Device UI",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = "Optimize headers, tabs, spacing, and grids across compact phones, large phones, and tablets.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text("UI Layout Density & Scale", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        "AUTO" to "Auto",
+                        "COMPACT" to "Compact",
+                        "COMFORTABLE" to "Spacious"
+                    ).forEach { (modeKey, label) ->
+                        val selected = settings.uiLayoutScaleMode == modeKey
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else Color.Transparent),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    SettingsManager.setUiLayoutScaleMode(modeKey)
+                                    AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                                }
+                                .testTag("chip_ui_scale_$modeKey")
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(vertical = 8.dp)) {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Adaptive Grid Columns by Screen Width", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Automatically adjusts IMG & VID Vault grid columns so cards never look cramped on narrow phones.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.adaptiveGridColumnsByScreenWidth,
+                        onCheckedChange = {
+                            SettingsManager.setAdaptiveGridColumnsByScreenWidth(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.testTag("toggle_adaptive_grid_columns")
+                    )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = MaterialTheme.colorScheme.outline)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Compact Top Navigation Tabs", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Uses sleeker tab spacing and font sizing so more tabs remain visible without clipping.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.compactTopTabs,
+                        onCheckedChange = {
+                            SettingsManager.setCompactTopTabs(it)
+                            AppSecurityManager.updateFingerprintSettingsDataIfRegistered(context)
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.testTag("toggle_compact_top_tabs")
                     )
                 }
             }
@@ -2892,6 +3382,12 @@ fun SettingsScreen(
             )
         }
 
+        if (showApsHistoryDialog) {
+            ApsTransferHistoryDialog(
+                onDismiss = { showApsHistoryDialog = false }
+            )
+        }
+
         if (showUnpairConfirmDialog) {
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { showUnpairConfirmDialog = false },
@@ -2926,6 +3422,7 @@ fun SettingsScreen(
                     }
                 }
             )
+        }
         }
     }
 }

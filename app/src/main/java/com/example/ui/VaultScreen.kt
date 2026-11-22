@@ -163,6 +163,7 @@ fun VaultScreen(
     var showApsModal by remember { mutableStateOf(false) }
     var apsItemsToSend by remember { mutableStateOf<List<ApsTransferItem>>(emptyList()) }
     val apsState by ApsTransferEngine.state.collectAsStateWithLifecycle()
+    val appSettings by com.example.util.SettingsManager.settings.collectAsStateWithLifecycle()
 
     // Batch media picker (Storage Access Framework: up to 500 images at once without 100 limit)
     val batchImagePickerLauncher = rememberLauncherForActivityResult(
@@ -390,8 +391,10 @@ fun VaultScreen(
             )
         }
 
-        // APS Vault-to-Vault Modal (IMG Vault Only — auto-pops on incoming IMG Vault requests!)
-        val incomingImgRequest = apsState.pendingIncomingRequest != null && apsState.activeReceiveVaultType == ApsVaultType.IMG_VAULT
+        // APS Vault-to-Vault Modal (IMG Vault Only — auto-pops on incoming IMG Vault requests when enabled!)
+        val incomingImgRequest = appSettings.apsAutoShowIncomingPrompt &&
+            apsState.pendingIncomingRequest != null &&
+            apsState.activeReceiveVaultType == ApsVaultType.IMG_VAULT
         if (uiState.isUnlocked && (showApsModal || incomingImgRequest)) {
             ApsTransferModal(
                 vaultType = ApsVaultType.IMG_VAULT,
@@ -1307,13 +1310,25 @@ private fun UnlockedGalleryView(
                 }
             }
         } else if (uiState.isGridView) {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 100.dp),
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(bottom = 60.dp)
-            ) {
+            val gridSettings by com.example.util.SettingsManager.settings.collectAsStateWithLifecycle()
+            androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val gridCells = if (gridSettings.adaptiveGridColumnsByScreenWidth) {
+                    val minTile = when {
+                        maxWidth < 360.dp -> 96.dp
+                        maxWidth < 600.dp -> 104.dp
+                        else -> 132.dp
+                    }
+                    GridCells.Adaptive(minSize = minTile)
+                } else {
+                    GridCells.Fixed(gridSettings.gridColumns.coerceIn(2, 5))
+                }
+                LazyVerticalGrid(
+                    columns = gridCells,
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(bottom = 60.dp)
+                ) {
                 items(images, key = { it.id }) { image ->
                     val isSelected = uiState.selectedImageIds.contains(image.id)
                     val idx = images.indexOf(image)
@@ -1333,6 +1348,7 @@ private fun UnlockedGalleryView(
                         onImportToSsi = { onImportToSsi(image) }
                     )
                 }
+            }
             }
         } else {
             LazyColumn(

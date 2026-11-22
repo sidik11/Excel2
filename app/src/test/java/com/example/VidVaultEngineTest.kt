@@ -2,6 +2,10 @@ package com.example
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
+import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSpec
 import androidx.test.core.app.ApplicationProvider
 import com.example.util.AppStorageHelper
 import com.example.util.VidVaultEngine
@@ -74,6 +78,7 @@ class VidVaultEngineTest {
         assertTrue("Recovery key unlock must succeed", recRes is VidVaultResult.Success)
     }
 
+    @OptIn(UnstableApi::class)
     @Test
     fun testStreamingImportDirectDiskMediaDataSourceAndCompaction() = runBlocking {
         val vaultFile = File(testDir, "stream_test.vidvault")
@@ -138,6 +143,32 @@ class VidVaultEngineTest {
                 payloadA.copyOfRange(payloadA.size - 19, payloadA.size),
                 tailBuf.copyOfRange(0, 19)
             )
+        }
+
+        // 1B. Verify Media3 ExoPlayer EncryptedVaultExoDataSource random-access seek & read!
+        val exoFactory = VidVaultEngine.createExoDataSourceFactory(vaultFile, key, recA)
+        assertNotNull("ExoDataSource factory must be created", exoFactory)
+        val exoSource = exoFactory!!.createDataSource()
+        try {
+            val exoSeekOffset = 73_129L
+            val exoLen = 32_777
+            val openedLen = exoSource.open(DataSpec(Uri.parse("vidvault://${recA.id}"), exoSeekOffset, exoLen.toLong()))
+            assertEquals(exoLen.toLong(), openedLen)
+            val exoOut = ByteArray(exoLen)
+            var total = 0
+            while (total < exoLen) {
+                val n = exoSource.read(exoOut, total, exoLen - total)
+                assertTrue("ExoDataSource should return bytes before EOF", n > 0)
+                total += n
+            }
+            assertEquals(C.RESULT_END_OF_INPUT, exoSource.read(ByteArray(16), 0, 16))
+            assertArrayEquals(
+                "Media3 EncryptedVaultExoDataSource seek/read must match plaintext byte-for-byte",
+                payloadA.copyOfRange(exoSeekOffset.toInt(), exoSeekOffset.toInt() + exoLen),
+                exoOut
+            )
+        } finally {
+            exoSource.close()
         }
 
         // 2. Verify zero-RAM streaming export to OutputStream matches byte-for-byte

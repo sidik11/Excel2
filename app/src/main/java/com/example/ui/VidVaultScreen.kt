@@ -14,6 +14,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -22,9 +23,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -179,122 +182,132 @@ fun VidVaultScreen(
                 tonalElevation = 2.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        Brush.linearGradient(listOf(Color(0xFF00CEC9), Color(0xFF6C5CE7)))
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val isNarrowHeader = maxWidth < 375.dp || settings.uiLayoutScaleMode == "COMPACT"
+                    val headerPadH = if (isNarrowHeader) 8.dp else 12.dp
+                    val iconBtnSize = if (isNarrowHeader) 36.dp else 44.dp
+                    Column(modifier = Modifier.padding(horizontal = headerPadH, vertical = if (isNarrowHeader) 8.dp else 10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .size(if (isNarrowHeader) 32.dp else 36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            Brush.linearGradient(listOf(Color(0xFF00CEC9), Color(0xFF6C5CE7)))
+                                        )
+                                ) {
+                                    Icon(
+                                        imageVector = if (uiState.isUnlocked) Icons.Default.LockOpen else Icons.Default.Movie,
+                                        contentDescription = "VID Vault",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(if (isNarrowHeader) 18.dp else 20.dp)
                                     )
-                            ) {
-                                Icon(
-                                    imageVector = if (uiState.isUnlocked) Icons.Default.LockOpen else Icons.Default.Movie,
-                                    contentDescription = "VID Vault",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                }
+                                Spacer(modifier = Modifier.width(if (isNarrowHeader) 8.dp else 10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = if (uiState.isUnlocked) uiState.metadata?.name ?: "VID Vault" else "VID Vault",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = if (isNarrowHeader) 13.sp else 15.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        if (!isNarrowHeader || !uiState.isUnlocked) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Color(0xFF00CEC9).copy(alpha = 0.18f)
+                                            ) {
+                                                Text(
+                                                    text = "30 GB",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF00CEC9),
+                                                    maxLines = 1,
+                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                     Text(
-                                        text = if (uiState.isUnlocked) uiState.metadata?.name ?: "VID Vault" else "VID Vault",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
+                                        text = if (uiState.isUnlocked) {
+                                            "${uiState.metadata?.activeVideoCount ?: 0} videos • ExoPlayer Zero-RAM"
+                                        } else {
+                                            "Encrypted Video Vault • All Formats"
+                                        },
+                                        fontSize = if (isNarrowHeader) 10.sp else 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color(0xFF00CEC9).copy(alpha = 0.18f)
-                                    ) {
-                                        Text(
-                                            text = "30 GB MAX",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF00CEC9),
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
                                 }
-                                Text(
-                                    text = if (uiState.isUnlocked) {
-                                        "${uiState.metadata?.activeVideoCount ?: 0} videos • Zero-RAM Disk Streaming"
-                                    } else {
-                                        "Encrypted Video Vault • All Formats • Same Location as IMG Vault"
-                                    },
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
                             }
-                        }
 
-                        if (uiState.isUnlocked) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                val isVidApsReceiving = apsState.isReceiveEnabled && apsState.activeReceiveVaultType == ApsVaultType.VID_VAULT
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (isVidApsReceiving) Color(0xFF00B894).copy(alpha = 0.22f) else Color(0xFF6C5CE7).copy(alpha = 0.2f),
-                                    border = BorderStroke(1.dp, if (isVidApsReceiving) Color(0xFF00B894) else Color(0xFF00CEC9)),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            apsItemsToSend = emptyList()
-                                            showApsModal = true
-                                        }
-                                        .testTag("vid_vault_aps_receive_btn")
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            if (uiState.isUnlocked) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    val isVidApsReceiving = apsState.isReceiveEnabled && apsState.activeReceiveVaultType == ApsVaultType.VID_VAULT
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isVidApsReceiving) Color(0xFF00B894).copy(alpha = 0.22f) else Color(0xFF6C5CE7).copy(alpha = 0.2f),
+                                        border = BorderStroke(1.dp, if (isVidApsReceiving) Color(0xFF00B894) else Color(0xFF00CEC9)),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                apsItemsToSend = emptyList()
+                                                showApsModal = true
+                                            }
+                                            .testTag("vid_vault_aps_receive_btn")
                                     ) {
-                                        Icon(
-                                            Icons.Default.Radar,
-                                            contentDescription = "APS Receive",
-                                            tint = if (isVidApsReceiving) Color(0xFF00B894) else Color(0xFF00CEC9),
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = if (isVidApsReceiving) "APS ON" else "APS",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isVidApsReceiving) Color(0xFF00B894) else Color(0xFF00CEC9)
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(horizontal = if (isNarrowHeader) 6.dp else 8.dp, vertical = 5.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Radar,
+                                                contentDescription = "APS Receive",
+                                                tint = if (isVidApsReceiving) Color(0xFF00B894) else Color(0xFF00CEC9),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(
+                                                text = if (isVidApsReceiving) "APS ON" else "APS",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                color = if (isVidApsReceiving) Color(0xFF00B894) else Color(0xFF00CEC9)
+                                            )
+                                        }
                                     }
-                                }
-                                IconButton(
-                                    onClick = { viewModel.setVaultInfoDialogOpen(true) },
-                                    modifier = Modifier.testTag("vid_vault_info_btn")
-                                ) {
-                                    Icon(Icons.Default.Info, contentDescription = "VID Vault Info", tint = MaterialTheme.colorScheme.primary)
-                                }
-                                IconButton(
-                                    onClick = { viewModel.compactVault() },
-                                    modifier = Modifier.testTag("vid_vault_compact_btn")
-                                ) {
-                                    Icon(Icons.Default.CleaningServices, contentDescription = "Compact VID Vault", tint = Color(0xFF00CEC9))
-                                }
-                                IconButton(
-                                    onClick = { viewModel.lockVault() },
-                                    modifier = Modifier.testTag("vid_vault_lock_btn")
-                                ) {
-                                    Icon(Icons.Default.Lock, contentDescription = "Lock VID Vault", tint = MaterialTheme.colorScheme.error)
+                                    IconButton(
+                                        onClick = { viewModel.setVaultInfoDialogOpen(true) },
+                                        modifier = Modifier.size(iconBtnSize).testTag("vid_vault_info_btn")
+                                    ) {
+                                        Icon(Icons.Default.Info, contentDescription = "VID Vault Info", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(if (isNarrowHeader) 18.dp else 20.dp))
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.compactVault() },
+                                        modifier = Modifier.size(iconBtnSize).testTag("vid_vault_compact_btn")
+                                    ) {
+                                        Icon(Icons.Default.CleaningServices, contentDescription = "Compact VID Vault", tint = Color(0xFF00CEC9), modifier = Modifier.size(if (isNarrowHeader) 18.dp else 20.dp))
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.lockVault() },
+                                        modifier = Modifier.size(iconBtnSize).testTag("vid_vault_lock_btn")
+                                    ) {
+                                        Icon(Icons.Default.Lock, contentDescription = "Lock VID Vault", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(if (isNarrowHeader) 18.dp else 20.dp))
+                                    }
                                 }
                             }
                         }
-                    }
 
                     // Progress Banner while streaming/importing/compacting
                     if (uiState.isLoading) {
@@ -341,6 +354,7 @@ fun VidVaultScreen(
                             }
                         }
                     }
+                }
                 }
             }
 
@@ -826,29 +840,40 @@ fun VidVaultScreen(
                         }
                     }
                 } else if (uiState.isGridView) {
-                    val cols = settings.gridColumns.coerceIn(2, 4)
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(cols),
-                        contentPadding = PaddingValues(10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f).testTag("vid_vault_grid")
-                    ) {
-                        itemsIndexed(uiState.displayedVideos, key = { _, v -> v.id }) { index, video ->
-                            VidVaultGridCard(
-                                video = video,
-                                isSelected = uiState.selectedVideoIds.contains(video.id),
-                                onClick = {
-                                    if (uiState.isMultiSelectActive) {
-                                        viewModel.toggleVideoSelection(video.id)
-                                    } else {
-                                        viewModel.openPlayerModal(index)
-                                    }
-                                },
-                                onLongClick = { viewModel.toggleVideoSelection(video.id) },
-                                onShare = { viewModel.shareSingleVideo(context, video.id) },
-                                onRename = { viewModel.openRenameDialog(video) }
-                            )
+                    BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                        val cols = if (settings.adaptiveGridColumnsByScreenWidth) {
+                            when {
+                                maxWidth < 360.dp -> 2
+                                maxWidth < 540.dp -> settings.gridColumns.coerceIn(2, 3)
+                                maxWidth < 760.dp -> 3
+                                else -> 4
+                            }
+                        } else {
+                            settings.gridColumns.coerceIn(2, 4)
+                        }
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(cols),
+                            contentPadding = PaddingValues(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxSize().testTag("vid_vault_grid")
+                        ) {
+                            itemsIndexed(uiState.displayedVideos, key = { _, v -> v.id }) { index, video ->
+                                VidVaultGridCard(
+                                    video = video,
+                                    isSelected = uiState.selectedVideoIds.contains(video.id),
+                                    onClick = {
+                                        if (uiState.isMultiSelectActive) {
+                                            viewModel.toggleVideoSelection(video.id)
+                                        } else {
+                                            viewModel.openPlayerModal(index)
+                                        }
+                                    },
+                                    onLongClick = { viewModel.toggleVideoSelection(video.id) },
+                                    onShare = { viewModel.shareSingleVideo(context, video.id) },
+                                    onRename = { viewModel.openRenameDialog(video) }
+                                )
+                            }
                         }
                     }
                 } else {
@@ -878,11 +903,12 @@ fun VidVaultScreen(
             }
         }
 
-        // Fullscreen Video Player Modal
+        // Fullscreen Video Player Modal (Media3 ExoPlayer + Software Decoder Fallback + SurfaceView/TextureView toggle)
         uiState.activeModalIndex?.let { index ->
             VidVaultPlayerModal(
                 videos = uiState.displayedVideos,
                 currentIndex = index,
+                createExoDataSourceFactory = { videoId -> viewModel.createExoDataSourceFactory(videoId) },
                 createDirectDataSource = { videoId -> viewModel.createDirectMediaDataSource(videoId) },
                 prepareFallbackStorageFile = { videoId -> viewModel.prepareTempStorageFile(videoId) },
                 onShare = { video -> viewModel.shareSingleVideo(context, video.id) },
@@ -892,8 +918,10 @@ fun VidVaultScreen(
             )
         }
 
-        // APS Vault-to-Vault Modal (VID Vault Only — auto-pops on incoming VID Vault requests!)
-        val incomingVidRequest = apsState.pendingIncomingRequest != null && apsState.activeReceiveVaultType == ApsVaultType.VID_VAULT
+        // APS Vault-to-Vault Modal (VID Vault Only — auto-pops on incoming VID Vault requests when enabled!)
+        val incomingVidRequest = settings.apsAutoShowIncomingPrompt &&
+            apsState.pendingIncomingRequest != null &&
+            apsState.activeReceiveVaultType == ApsVaultType.VID_VAULT
         if (uiState.isUnlocked && (showApsModal || incomingVidRequest)) {
             ApsTransferModal(
                 vaultType = ApsVaultType.VID_VAULT,

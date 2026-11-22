@@ -4,15 +4,25 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaDataSource
 import android.media.MediaMetadataRetriever
+import android.media.ThumbnailUtils
 import android.net.Uri
 import android.os.Build
+import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.util.Size
+import androidx.annotation.OptIn
+import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.BaseDataSource
+import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -602,7 +612,8 @@ object VidVaultEngine {
         displayName: String,
         mimeType: String = "video/mp4",
         durationHintMs: Long = 0L,
-        targetFolderId: String? = null
+        targetFolderId: String? = null,
+        preExtractedThumbnailBytes: ByteArray? = null
     ): VidVaultResult<VidVaultMetadata> = withContext(Dispatchers.IO) {
         try {
             if (!sourceFile.exists() || sourceFile.length() <= 0L) {
@@ -617,9 +628,17 @@ object VidVaultEngine {
             }
 
             val targetFolder = targetFolderId ?: currentMetadata.folders.firstOrNull()?.id
-            val sourceUri = Uri.fromFile(sourceFile)
-            val (thumbBytes, detectedDuration) = extractVideoThumbnailAndDuration(context, sourceUri)
-            val finalDuration = if (detectedDuration > 0L) detectedDuration else durationHintMs
+            val (thumbBytes, finalDuration) = if (preExtractedThumbnailBytes != null && preExtractedThumbnailBytes.isNotEmpty()) {
+                val dur = if (durationHintMs > 0L) {
+                    durationHintMs
+                } else {
+                    extractVideoDurationOnlyFromFile(sourceFile)
+                }
+                Pair(preExtractedThumbnailBytes, dur)
+            } else {
+                val (extractedBytes, detectedDuration) = extractVideoThumbnailAndDurationFromFile(sourceFile)
+                Pair(extractedBytes, if (detectedDuration > 0L) detectedDuration else durationHintMs)
+            }
             val (thumbIv, thumbCipher) = if (thumbBytes.isNotEmpty()) {
                 encryptGcmBlock(thumbBytes, masterKey)
             } else {
@@ -766,6 +785,45 @@ object VidVaultEngine {
     }
 
     /**
+     * Creates an AndroidX Media3 ExoPlayer DataSource.Factory that streams encrypted bytes
+     * directly from the .vidvault file on disk with AES-256-CTR random-access seeking and < 128 KB RAM.
+     */
+    @OptIn(UnstableApi::class)
+    fun createExoDataSourceFactory(
+        vaultFile: File,
+        masterKey: SecretKeySpec,
+        record: VidVaultRecord
+    ): DataSource.Factory? {
+        return try {
+            RandomAccessFile(vaultFile, "r").use { raf ->
+                raf.seek(record.recordOffset)
+                val headerBytes = ByteArray(RECORD_HEADER_SIZE)
+                raf.readFully(headerBytes)
+                val buf = ByteBuffer.wrap(headerBytes).order(ByteOrder.LITTLE_ENDIAN)
+                val magic = buf.getInt()
+                if (magic != MAGIC_RECORD) return null
+                buf.readBytes(36) // id
+                buf.getInt() // isDeleted
+                val ctrIv = buf.readBytes(CTR_IV_LEN)
+                val videoLen = buf.getLong()
+                val dataOffset = record.recordOffset + RECORD_HEADER_SIZE
+
+                DataSource.Factory {
+                    EncryptedVaultExoDataSource(
+                        vaultFile = vaultFile,
+                        masterKey = masterKey,
+                        baseIv = ctrIv,
+                        dataOffset = dataOffset,
+                        dataLength = videoLen
+                    )
+                }
+            }
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    /**
      * Streams a video record from the encrypted container to a temporary file on storage
      * using a fixed 64 KB buffer (for sharing, exporting to Movies/VIDVault, or fallback playback).
      */
@@ -778,7 +836,8 @@ object VidVaultEngine {
     ): VidVaultResult<File> = withContext(Dispatchers.IO) {
         try {
             val tempDir = AppStorageHelper.getVidVaultTempDir(context)
-            val ext = record.name.substringAfterLast('.', "mp4").ifEmpty { "mp4" }
+            val rawExt = record.name.substringAfterLast('.', "mp4").filter { it.isLetterOrDigit() }.lowercase().take(6)
+            val ext = rawExt.ifEmpty { "mp4" }
             val safeName = "vid_${record.id}.$ext"
             val targetFile = File(tempDir, safeName)
 
@@ -786,52 +845,63 @@ object VidVaultEngine {
                 return@withContext VidVaultResult.Success(targetFile)
             }
 
-            RandomAccessFile(vaultFile, "r").use { raf ->
-                raf.seek(record.recordOffset)
-                val headerBytes = ByteArray(RECORD_HEADER_SIZE)
-                raf.readFully(headerBytes)
-                val buf = ByteBuffer.wrap(headerBytes).order(ByteOrder.LITTLE_ENDIAN)
-                val magic = buf.getInt()
-                if (magic != MAGIC_RECORD) {
-                    return@withContext VidVaultResult.Error("Video record header mismatch.")
-                }
-                buf.readBytes(36) // id
-                buf.getInt() // isDeleted
-                val ctrIv = buf.readBytes(CTR_IV_LEN)
-                val videoLen = buf.getLong()
-
-                val cipher = Cipher.getInstance("AES/CTR/NoPadding")
-                cipher.init(Cipher.DECRYPT_MODE, masterKey, IvParameterSpec(ctrIv))
-
-                val readBuf = ByteArray(STREAM_BUFFER_SIZE)
-                val outBuf = ByteArray(STREAM_BUFFER_SIZE + 32)
-                var remaining = videoLen
-                var processed = 0L
-
-                raf.seek(record.recordOffset + RECORD_HEADER_SIZE)
-                FileOutputStream(targetFile).use { fos ->
-                    while (remaining > 0L) {
-                        val toRead = minOf(remaining, STREAM_BUFFER_SIZE.toLong()).toInt()
-                        val read = raf.read(readBuf, 0, toRead)
-                        if (read <= 0) break
-                        val decLen = cipher.update(readBuf, 0, read, outBuf, 0)
-                        if (decLen > 0) {
-                            fos.write(outBuf, 0, decLen)
-                        }
-                        remaining -= read
-                        processed += read
-                        if (videoLen > 0L) {
-                            onProgress?.invoke((processed.toFloat() / videoLen).coerceIn(0f, 1f))
-                        }
+            val partialFile = File(tempDir, "tmp_${record.id}.$ext")
+            try {
+                RandomAccessFile(vaultFile, "r").use { raf ->
+                    raf.seek(record.recordOffset)
+                    val headerBytes = ByteArray(RECORD_HEADER_SIZE)
+                    raf.readFully(headerBytes)
+                    val buf = ByteBuffer.wrap(headerBytes).order(ByteOrder.LITTLE_ENDIAN)
+                    val magic = buf.getInt()
+                    if (magic != MAGIC_RECORD) {
+                        return@withContext VidVaultResult.Error("Video record header mismatch.")
                     }
-                    val finalChunk = cipher.doFinal()
-                    if (finalChunk != null && finalChunk.isNotEmpty()) {
-                        fos.write(finalChunk)
+                    buf.readBytes(36) // id
+                    buf.getInt() // isDeleted
+                    val ctrIv = buf.readBytes(CTR_IV_LEN)
+                    val videoLen = buf.getLong()
+
+                    val cipher = Cipher.getInstance("AES/CTR/NoPadding")
+                    cipher.init(Cipher.DECRYPT_MODE, masterKey, IvParameterSpec(ctrIv))
+
+                    val readBuf = ByteArray(STREAM_BUFFER_SIZE)
+                    val outBuf = ByteArray(STREAM_BUFFER_SIZE + 32)
+                    var remaining = videoLen
+                    var processed = 0L
+
+                    raf.seek(record.recordOffset + RECORD_HEADER_SIZE)
+                    FileOutputStream(partialFile).use { fos ->
+                        while (remaining > 0L) {
+                            val toRead = minOf(remaining, STREAM_BUFFER_SIZE.toLong()).toInt()
+                            val read = raf.read(readBuf, 0, toRead)
+                            if (read <= 0) break
+                            val decLen = cipher.update(readBuf, 0, read, outBuf, 0)
+                            if (decLen > 0) {
+                                fos.write(outBuf, 0, decLen)
+                            }
+                            remaining -= read
+                            processed += read
+                            if (videoLen > 0L) {
+                                onProgress?.invoke((processed.toFloat() / videoLen).coerceIn(0f, 1f))
+                            }
+                        }
+                        val finalChunk = cipher.doFinal()
+                        if (finalChunk != null && finalChunk.isNotEmpty()) {
+                            fos.write(finalChunk)
+                        }
+                        fos.fd.sync()
                     }
                 }
+                if (targetFile.exists()) targetFile.delete()
+                if (!partialFile.renameTo(targetFile)) {
+                    partialFile.copyTo(targetFile, overwrite = true)
+                    partialFile.delete()
+                }
+                VidVaultResult.Success(targetFile)
+            } catch (inner: Throwable) {
+                try { partialFile.delete() } catch (_: Throwable) {}
+                throw inner
             }
-
-            VidVaultResult.Success(targetFile)
         } catch (e: Throwable) {
             VidVaultResult.Error("Failed to stream-decrypt video: ${e.message}", e)
         }
@@ -945,47 +1015,127 @@ object VidVaultEngine {
         }
     }
 
+    /**
+     * Generates and caches a JPEG thumbnail for videos whose record has hasThumbnail == false
+     * (e.g., videos previously received over APS before sender-thumbnail transfer was added).
+     * Tries zero-temp-file MediaDataSource first, then falls back to temporary file + ThumbnailUtils.
+     */
+    suspend fun generateAndCacheMissingThumbnail(
+        context: Context,
+        vaultFile: File,
+        masterKey: SecretKeySpec,
+        record: VidVaultRecord
+    ): File? = withContext(Dispatchers.IO) {
+        val thumbDir = File(context.cacheDir, "vid_vault_thumbs").apply { mkdirs() }
+        val cachedFile = File(thumbDir, "vthumb_${record.id}.jpg")
+        if (cachedFile.exists() && cachedFile.length() > 0L) {
+            return@withContext cachedFile
+        }
+
+        // Attempt 1: Direct encrypted MediaDataSource (Zero temporary file on storage)
+        try {
+            val ds = createDirectDiskMediaDataSource(vaultFile, masterKey, record)
+            if (ds != null) {
+                val retriever = MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(ds)
+                    val (bytes, _) = extractFrameAndDurationFromRetriever(retriever)
+                    if (bytes.isNotEmpty()) {
+                        FileOutputStream(cachedFile).use { it.write(bytes) }
+                        return@withContext cachedFile
+                    }
+                } finally {
+                    try { retriever.release() } catch (_: Throwable) {}
+                    try { ds.close() } catch (_: Throwable) {}
+                }
+            }
+        } catch (_: Throwable) {}
+
+        // Attempt 2: Stream to a short-lived temp file & use FD + ThumbnailUtils fallback, then wipe immediately
+        val tmpDir = File(context.cacheDir, "vid_thumb_repair").apply { mkdirs() }
+        val rawExt = record.name.substringAfterLast('.', "mp4").lowercase().filter { it.isLetterOrDigit() }.ifBlank { "mp4" }
+        val tmpFile = File(tmpDir, "repair_${record.id}.$rawExt")
+        return@withContext try {
+            val decRes = FileOutputStream(tmpFile).use { fos ->
+                streamDecryptVideoToOutputStream(vaultFile, masterKey, record, fos)
+            }
+            if (decRes is VidVaultResult.Success && tmpFile.exists() && tmpFile.length() > 0L) {
+                val (bytes, _) = extractVideoThumbnailAndDurationFromFile(tmpFile)
+                if (bytes.isNotEmpty()) {
+                    FileOutputStream(cachedFile).use { it.write(bytes) }
+                    cachedFile
+                } else {
+                    null
+                }
+            } else {
+                null
+            }
+        } catch (_: Throwable) {
+            null
+        } finally {
+            try { tmpFile.delete() } catch (_: Throwable) {}
+        }
+    }
+
+    private fun extractVideoDurationOnlyFromFile(file: File): Long {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            try {
+                FileInputStream(file).use { fis -> retriever.setDataSource(fis.fd) }
+            } catch (_: Throwable) {
+                retriever.setDataSource(file.absolutePath)
+            }
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } catch (_: Throwable) {
+            0L
+        } finally {
+            try { retriever.release() } catch (_: Throwable) {}
+        }
+    }
+
+    private fun extractVideoThumbnailAndDurationFromFile(file: File): Pair<ByteArray, Long> {
+        var durationMs = 0L
+        var bytes = ByteArray(0)
+
+        // Stage 1: MediaMetadataRetriever via FileDescriptor (most reliable on Android 10+) -> Path fallback
+        val retriever = MediaMetadataRetriever()
+        try {
+            try {
+                FileInputStream(file).use { fis -> retriever.setDataSource(fis.fd) }
+            } catch (_: Throwable) {
+                retriever.setDataSource(file.absolutePath)
+            }
+            val res = extractFrameAndDurationFromRetriever(retriever)
+            bytes = res.first
+            durationMs = res.second
+        } catch (_: Throwable) {
+        } finally {
+            try { retriever.release() } catch (_: Throwable) {}
+        }
+
+        // Stage 2: Android ThumbnailUtils fallback if MediaMetadataRetriever returned empty
+        if (bytes.isEmpty()) {
+            try {
+                val bmp: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ThumbnailUtils.createVideoThumbnail(file, Size(320, 320), null)
+                } else {
+                    @Suppress("DEPRECATION")
+                    ThumbnailUtils.createVideoThumbnail(file.absolutePath, MediaStore.Video.Thumbnails.MINI_KIND)
+                }
+                if (bmp != null) {
+                    bytes = compressThumbnailBitmap(bmp)
+                }
+            } catch (_: Throwable) {}
+        }
+
+        return Pair(bytes, durationMs)
+    }
+
     private fun extractVideoThumbnailAndDuration(context: Context, uri: Uri): Pair<ByteArray, Long> {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
-            val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            val durationMs = durationStr?.toLongOrNull() ?: 0L
-
-            val targetTimeUs = if (durationMs > 2000L) 1_000_000L else 0L
-            val frame: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                retriever.getScaledFrameAtTime(
-                    targetTimeUs,
-                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                    320,
-                    320
-                )
-            } else {
-                retriever.getFrameAtTime(targetTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-            }
-
-            val bytes = if (frame != null) {
-                val maxDim = 256
-                val scaled = if (frame.width > maxDim || frame.height > maxDim) {
-                    val ratio = minOf(maxDim.toFloat() / frame.width, maxDim.toFloat() / frame.height)
-                    Bitmap.createScaledBitmap(
-                        frame,
-                        (frame.width * ratio).toInt().coerceAtLeast(1),
-                        (frame.height * ratio).toInt().coerceAtLeast(1),
-                        true
-                    )
-                } else {
-                    frame
-                }
-                val baos = ByteArrayOutputStream()
-                scaled.compress(Bitmap.CompressFormat.JPEG, 72, baos)
-                if (scaled != frame) scaled.recycle()
-                frame.recycle()
-                baos.toByteArray()
-            } else {
-                ByteArray(0)
-            }
-            Pair(bytes, durationMs)
+            extractFrameAndDurationFromRetriever(retriever)
         } catch (_: Throwable) {
             Pair(ByteArray(0), 0L)
         } finally {
@@ -993,6 +1143,62 @@ object VidVaultEngine {
                 retriever.release()
             } catch (_: Throwable) {}
         }
+    }
+
+    private fun extractFrameAndDurationFromRetriever(retriever: MediaMetadataRetriever): Pair<ByteArray, Long> {
+        val durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+        val durationMs = durationStr?.toLongOrNull() ?: 0L
+        val targetTimeUs = if (durationMs > 2000L) 1_000_000L else 0L
+
+        var frame: Bitmap? = null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            frame = try {
+                retriever.getScaledFrameAtTime(targetTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 320, 320)
+            } catch (_: Throwable) { null }
+        }
+        if (frame == null) {
+            frame = try {
+                retriever.getFrameAtTime(targetTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            } catch (_: Throwable) { null }
+        }
+        if (frame == null) {
+            frame = try {
+                retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            } catch (_: Throwable) { null }
+        }
+        if (frame == null) {
+            frame = try {
+                retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST)
+            } catch (_: Throwable) { null }
+        }
+        if (frame == null) {
+            frame = try {
+                retriever.getFrameAtTime(-1L)
+            } catch (_: Throwable) { null }
+        }
+
+        val bytes = if (frame != null) compressThumbnailBitmap(frame) else ByteArray(0)
+        return Pair(bytes, durationMs)
+    }
+
+    private fun compressThumbnailBitmap(frame: Bitmap): ByteArray {
+        val maxDim = 256
+        val scaled = if (frame.width > maxDim || frame.height > maxDim) {
+            val ratio = minOf(maxDim.toFloat() / frame.width, maxDim.toFloat() / frame.height)
+            Bitmap.createScaledBitmap(
+                frame,
+                (frame.width * ratio).toInt().coerceAtLeast(1),
+                (frame.height * ratio).toInt().coerceAtLeast(1),
+                true
+            )
+        } else {
+            frame
+        }
+        val baos = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.JPEG, 74, baos)
+        if (scaled != frame) scaled.recycle()
+        frame.recycle()
+        return baos.toByteArray()
     }
 
     private fun resolveVideoMimeType(context: Context, uri: Uri, name: String): String {
@@ -1450,7 +1656,7 @@ class EncryptedVideoDataSource(
             val counterIv = VidVaultEngine.incrementCtrIv(baseIv, blockIndex)
             val cipher = Cipher.getInstance("AES/CTR/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, masterKey, IvParameterSpec(counterIv))
-            val decLen = cipher.update(encBuf, 0, actuallyRead, decBuf, 0)
+            val decLen = cipher.doFinal(encBuf, 0, actuallyRead, decBuf, 0)
             val usable = (decLen - skipInBlock).coerceAtMost(bytesToRead)
             if (usable <= 0) return -1
 
@@ -1467,6 +1673,101 @@ class EncryptedVideoDataSource(
                     raf.close()
                 } catch (_: Throwable) {}
             }
+        }
+    }
+}
+
+/**
+ * AndroidX Media3 ExoPlayer zero-RAM direct encrypted disk DataSource.
+ * Reads and decrypts arbitrary seek ranges directly from .vidvault using AES-256-CTR + doFinal()
+ * so 1080p/4K/HEVC/MKV/MOV/MP4 videos stream instantly with software fallback support and < 128 KB RAM.
+ */
+@OptIn(UnstableApi::class)
+class EncryptedVaultExoDataSource(
+    private val vaultFile: File,
+    private val masterKey: SecretKeySpec,
+    private val baseIv: ByteArray,
+    private val dataOffset: Long,
+    private val dataLength: Long
+) : BaseDataSource(false) {
+
+    private var raf: RandomAccessFile? = null
+    private var currentUri: Uri? = null
+    private var currentPos: Long = 0L
+    private var bytesRemaining: Long = 0L
+    private var opened = false
+
+    private val maxChunk = 64 * 1024
+    private val encBuf = ByteArray(maxChunk + 16)
+    private val decBuf = ByteArray(maxChunk + 48)
+
+    override fun open(dataSpec: DataSpec): Long {
+        currentUri = dataSpec.uri
+        transferInitializing(dataSpec)
+
+        val startPos = dataSpec.position.coerceAtLeast(0L)
+        if (startPos > dataLength) {
+            throw java.io.EOFException("Requested position $startPos exceeds encrypted video size $dataLength")
+        }
+
+        raf = RandomAccessFile(vaultFile, "r")
+        currentPos = startPos
+        bytesRemaining = if (dataSpec.length != C.LENGTH_UNSET.toLong()) {
+            minOf(dataSpec.length, dataLength - startPos)
+        } else {
+            dataLength - startPos
+        }
+
+        opened = true
+        transferStarted(dataSpec)
+        return bytesRemaining
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (length == 0) return 0
+        if (bytesRemaining <= 0L) return C.RESULT_END_OF_INPUT
+        val fileRaf = raf ?: return C.RESULT_END_OF_INPUT
+
+        val bytesToRead = minOf(length.toLong(), bytesRemaining, maxChunk.toLong()).toInt()
+        val blockIndex = currentPos / 16L
+        val skipInBlock = (currentPos % 16L).toInt()
+        val alignedDiskOffset = dataOffset + (blockIndex * 16L)
+        val totalReadLen = skipInBlock + bytesToRead
+
+        fileRaf.seek(alignedDiskOffset)
+        var actuallyRead = 0
+        while (actuallyRead < totalReadLen) {
+            val r = fileRaf.read(encBuf, actuallyRead, totalReadLen - actuallyRead)
+            if (r == -1) break
+            actuallyRead += r
+        }
+        if (actuallyRead <= skipInBlock) return C.RESULT_END_OF_INPUT
+
+        val counterIv = VidVaultEngine.incrementCtrIv(baseIv, blockIndex)
+        val cipher = Cipher.getInstance("AES/CTR/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, masterKey, IvParameterSpec(counterIv))
+        val decLen = cipher.doFinal(encBuf, 0, actuallyRead, decBuf, 0)
+        val usable = (decLen - skipInBlock).coerceAtMost(bytesToRead)
+        if (usable <= 0) return C.RESULT_END_OF_INPUT
+
+        System.arraycopy(decBuf, skipInBlock, buffer, offset, usable)
+        currentPos += usable
+        bytesRemaining -= usable
+        bytesTransferred(usable)
+        return usable
+    }
+
+    override fun getUri(): Uri? = currentUri
+
+    override fun close() {
+        currentUri = null
+        try {
+            raf?.close()
+        } catch (_: Throwable) {}
+        raf = null
+        if (opened) {
+            opened = false
+            transferEnded()
         }
     }
 }

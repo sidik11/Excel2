@@ -95,6 +95,8 @@ dependencies {
   implementation(libs.androidx.core.ktx)
   implementation("androidx.documentfile:documentfile:1.0.1")
   implementation("net.lingala.zip4j:zip4j:2.11.5")
+  implementation(libs.androidx.media3.exoplayer)
+  implementation(libs.androidx.media3.ui)
   // implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)

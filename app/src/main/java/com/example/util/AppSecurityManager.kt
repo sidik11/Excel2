@@ -611,6 +611,17 @@ object AppSecurityManager {
             appendLine("VID_VAULT_AUTO_PLAY=${appSettings.vidVaultAutoPlay}")
             appendLine("VID_VAULT_LOOP=${appSettings.vidVaultLoopPlayback}")
             appendLine("VID_VAULT_SPEED=${appSettings.vidVaultDefaultPlaybackSpeed}")
+            appendLine("VID_VAULT_SW_FALLBACK=${appSettings.vidVaultSoftwareDecoderFallback}")
+            appendLine("VID_VAULT_SURFACE_MODE=${appSettings.vidVaultVideoSurfaceMode}")
+            appendLine("VID_VAULT_ASPECT_MODE=${appSettings.vidVaultDefaultAspectMode}")
+            appendLine("VID_VAULT_KEEP_SCREEN_ON=${appSettings.vidVaultKeepScreenOn}")
+            appendLine("APS_PREFERRED_TRANSPORT=${appSettings.apsPreferredTransport}")
+            appendLine("APS_AUTO_STOP_ON_LOCK=${appSettings.apsAutoStopOnLock}")
+            appendLine("APS_AUTO_SHOW_PROMPT=${appSettings.apsAutoShowIncomingPrompt}")
+            appendLine("APS_BUFFER_KB=${appSettings.apsTransferBufferKb}")
+            appendLine("UI_LAYOUT_SCALE=${appSettings.uiLayoutScaleMode}")
+            appendLine("ADAPTIVE_GRID_COLS=${appSettings.adaptiveGridColumnsByScreenWidth}")
+            appendLine("COMPACT_TOP_TABS=${appSettings.compactTopTabs}")
 
             val dvSession = FirebaseBridgeManager.currentSession.value
             if (dvSession.code.isNotBlank()) {
@@ -930,7 +941,18 @@ object AppSecurityManager {
                 "VID_VAULT_DIRECT_STREAM=" to appSet.vidVaultDirectDiskStream.toString(),
                 "VID_VAULT_AUTO_PLAY=" to appSet.vidVaultAutoPlay.toString(),
                 "VID_VAULT_LOOP=" to appSet.vidVaultLoopPlayback.toString(),
-                "VID_VAULT_SPEED=" to appSet.vidVaultDefaultPlaybackSpeed.toString()
+                "VID_VAULT_SPEED=" to appSet.vidVaultDefaultPlaybackSpeed.toString(),
+                "VID_VAULT_SW_FALLBACK=" to appSet.vidVaultSoftwareDecoderFallback.toString(),
+                "VID_VAULT_SURFACE_MODE=" to appSet.vidVaultVideoSurfaceMode,
+                "VID_VAULT_ASPECT_MODE=" to appSet.vidVaultDefaultAspectMode,
+                "VID_VAULT_KEEP_SCREEN_ON=" to appSet.vidVaultKeepScreenOn.toString(),
+                "APS_PREFERRED_TRANSPORT=" to appSet.apsPreferredTransport,
+                "APS_AUTO_STOP_ON_LOCK=" to appSet.apsAutoStopOnLock.toString(),
+                "APS_AUTO_SHOW_PROMPT=" to appSet.apsAutoShowIncomingPrompt.toString(),
+                "APS_BUFFER_KB=" to appSet.apsTransferBufferKb.toString(),
+                "UI_LAYOUT_SCALE=" to appSet.uiLayoutScaleMode,
+                "ADAPTIVE_GRID_COLS=" to appSet.adaptiveGridColumnsByScreenWidth.toString(),
+                "COMPACT_TOP_TABS=" to appSet.compactTopTabs.toString()
             )
 
             settingsMap.forEach { (prefix, value) ->

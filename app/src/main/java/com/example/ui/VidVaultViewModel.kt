@@ -10,8 +10,11 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
+import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 import com.example.util.AppStorageHelper
 import com.example.util.ApsReceiverVaultTarget
 import com.example.util.ApsTransferEngine
@@ -379,23 +382,25 @@ class VidVaultViewModel(application: Application) : AndroidViewModel(application
         applyFiltersAndSort()
 
         // Lazily hydrate missing small JPEG thumbnails on IO thread (ultra-low RAM)
+        // Also auto-repairs already-received videos whose hasThumbnail was previously false!
         viewModelScope.launch(Dispatchers.IO) {
-            var changed = false
             val updatedList = allLoadedVideos.toMutableList()
             for (i in activeRecords.indices) {
                 if (activeMasterKey == null) break
                 val rec = activeRecords[i]
-                if (rec.hasThumbnail && updatedList[i].thumbnailFile == null) {
-                    val thumb = VidVaultEngine.getThumbnail(ctx, vaultFile, masterKey, rec)
-                    if (thumb != null) {
+                if (updatedList[i].thumbnailFile == null) {
+                    val thumb = if (rec.hasThumbnail) {
+                        VidVaultEngine.getThumbnail(ctx, vaultFile, masterKey, rec)
+                            ?: VidVaultEngine.generateAndCacheMissingThumbnail(ctx, vaultFile, masterKey, rec)
+                    } else {
+                        VidVaultEngine.generateAndCacheMissingThumbnail(ctx, vaultFile, masterKey, rec)
+                    }
+                    if (thumb != null && activeMasterKey != null) {
                         updatedList[i] = updatedList[i].copy(thumbnailFile = thumb)
-                        changed = true
+                        allLoadedVideos = updatedList.toList()
+                        applyFiltersAndSort()
                     }
                 }
-            }
-            if (changed && activeMasterKey != null) {
-                allLoadedVideos = updatedList
-                applyFiltersAndSort()
             }
         }
     }
@@ -486,7 +491,9 @@ class VidVaultViewModel(application: Application) : AndroidViewModel(application
 
     fun lockVault() {
         val ctx = getApplication<Application>()
-        if (ApsTransferEngine.state.value.activeReceiveVaultType == ApsVaultType.VID_VAULT) {
+        if (SettingsManager.settings.value.apsAutoStopOnLock &&
+            ApsTransferEngine.state.value.activeReceiveVaultType == ApsVaultType.VID_VAULT
+        ) {
             ApsTransferEngine.stopReceiveMode()
         }
         activeMasterKey = null
@@ -958,13 +965,24 @@ class VidVaultViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * Direct-from-disk zero-RAM MediaDataSource for instant playback in VidVaultPlayerModal.
+     * Direct-from-disk zero-RAM MediaDataSource for instant playback.
      */
     fun createDirectMediaDataSource(videoId: String): EncryptedVideoDataSource? {
         val file = activeVaultFile ?: return null
         val key = activeMasterKey ?: return null
         val rec = activeMetadata?.activeRecords?.find { it.id == videoId } ?: return null
         return VidVaultEngine.createDirectDiskMediaDataSource(file, key, rec)
+    }
+
+    /**
+     * Media3 ExoPlayer zero-RAM DataSource.Factory for hardware + software-fallback playback.
+     */
+    @OptIn(UnstableApi::class)
+    fun createExoDataSourceFactory(videoId: String): DataSource.Factory? {
+        val file = activeVaultFile ?: return null
+        val key = activeMasterKey ?: return null
+        val rec = activeMetadata?.activeRecords?.find { it.id == videoId } ?: return null
+        return VidVaultEngine.createExoDataSourceFactory(file, key, rec)
     }
 
     /**
@@ -1035,6 +1053,7 @@ class VidVaultViewModel(application: Application) : AndroidViewModel(application
         val ids = _uiState.value.selectedVideoIds
         if (ids.isEmpty()) return emptyList()
 
+        val ctx = getApplication<Application>()
         return meta.activeRecords.filter { ids.contains(it.id) }.map { rec ->
             ApsTransferItem(
                 id = rec.id,
@@ -1043,6 +1062,16 @@ class VidVaultViewModel(application: Application) : AndroidViewModel(application
                 mimeType = rec.mimeType,
                 durationMs = rec.durationMs,
                 vaultType = ApsVaultType.VID_VAULT,
+                thumbnailProvider = {
+                    try {
+                        val thumbFile = VidVaultEngine.getThumbnail(ctx, file, key, rec)
+                            ?: VidVaultEngine.generateAndCacheMissingThumbnail(ctx, file, key, rec)
+                        val rawBytes = thumbFile?.takeIf { it.exists() && it.length() in 1L..96_000L }?.readBytes()
+                        rawBytes
+                    } catch (_: Throwable) {
+                        null
+                    }
+                },
                 streamPlaintextTo = { outStream ->
                     VidVaultEngine.streamDecryptVideoToOutputStream(
                         vaultFile = file,
